@@ -492,22 +492,19 @@ def build_task_text() -> str:
     Builds the clear, improved task description.
     """
     return (
-        "Task: Implement a sorting algorithm that uses ONLY neighbor transpositions on a cyclic array.\n"
-        "Define exactly this function:\n"
-        "    def neighbor_sort_moves(vec: list) -> list:\n"
-        "It must return a list of swaps (i, j), where i and j are indices.\n"
-        "Each swap (i, j) MUST be a 'cyclic neighbor' pair. This means the indices i and j must be next to each other on a ring.\n"
-        "Formally: For n=len(vec), a pair (i, j) is valid if (and only if):\n"
-        "    j == (i + 1) % n\n"
-        "    OR\n"
-        "    i == (j + 1) % n\n"
-        "Examples of valid pairs for n=5: (1, 2), (2, 1), (4, 0), (0, 4).\n"
-        "Applying these swaps in order must transform the original vector into nondecreasing (sorted) order.\n"
-        "Notes:\n"
-        "• The function must NOT mutate its input vector.\n"
-        "• Duplicates may exist; standard nondecreasing order is expected.\n"
-        "• Return value example for n=5: [(1,2), (2,3), (4,0)]\n"
-        "• Do not rely on input(), files, or network. Keep the module importable.\n"
+"""
+Task: Implement a sorting algorithm that uses ONLY adjacent swaps on a vector.
+
+Input: A vector a of length n (0-indexed).
+
+Allowed operation:
+- swap (i, i+1) for i = 0..n-2
+- swap (n-1, 0)
+
+Output: Return a list of swaps as pairs of indices in the form (i, i+1) and, when needed, (n-1, 0).
+Applying these swaps in the given order must transform the original vector into nondecreasing order.
+Do not use any other operations.
+"""
     )
 
 def parse_args():
