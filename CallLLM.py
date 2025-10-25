@@ -11,8 +11,50 @@ import threading
 import queue
 import argparse
 
+def extract_python_code(raw: str) -> str:
+    """
+    Return an importable Python module string.
+    Primary contract: model returns JSON {"answer": "<code>"} with no extra keys.
+    Fallbacks: pick the largest ```python``` code block or trim to the entry function.
+    """
+    if raw is None:
+        return ""
+    text = str(raw).strip()
+
+    # 1) Try to locate a JSON object with "answer"
+    json_candidate = None
+    for m in re.finditer(r'\{[\s\S]*?\}', text):
+        blob = m.group(0)
+        try:
+            obj = json.loads(blob)
+            if isinstance(obj, dict) and "answer" in obj:
+                json_candidate = obj["answer"]
+                break
+        except Exception:
+            continue
+
+    if json_candidate is not None:
+        code_str = str(json_candidate)
+    else:
+        # 2) Fallback: extract from fenced code
+        CODE_BLOCK_RE = re.compile(r"```(?:python)?\s*(.*?)```", re.DOTALL | re.IGNORECASE)
+        blocks = CODE_BLOCK_RE.findall(text)
+        code_str = max(blocks, key=len) if blocks else text
+
+    # Strip simple HTML noise
+    code_str = re.sub(r"</?span[^>]*>", "", code_str)
+    code_str = re.sub(r"</?audio[^>]*>", "", code_str)
+    code_str = re.sub(r"</?source[^>]*>", "", code_str)
+
+    # Trim to the entry function if present
+    if "def neighbor_sort_moves" in code_str:
+        code_str = code_str[code_str.index("def neighbor_sort_moves"):]
+
+    return code_str.strip()
+
 
 import re
+
 # Optional: local Hugging Face inference
 _HF_AVAILABLE = False
 try:
@@ -86,41 +128,6 @@ class TrackedRotated(OriginalRotatedProvider):
 
 # Monkey-patch the default RotatedProvider with our tracked version
 retry_mod.RotatedProvider = TrackedRotated
-# --- Normalize/clean model responses to pure Python code ---
-CODE_BLOCK_RE = re.compile(r"```(?:python)?\s*(.*?)```", re.DOTALL | re.IGNORECASE)
-
-def extract_python_code(raw: str) -> str:
-    """Return an importable Python module string.
-    - Picks the largest ```python code block``` if present
-    - Tries to unwrap common provider JSON/dict shells
-    - Strips HTML tags sometimes returned by providers
-    - Trims everything before the required entry function if it exists
-    """
-    if raw is None:
-        return ""
-    text = str(raw)
-
-    # Unwrap very common dict-like payloads that contain 'content'
-    m = re.search(r"'content':\s*'(?P<cont>.*?)'", text, re.DOTALL)
-    if m:
-        candidate = m.group("cont")
-        if "def neighbor_sort_moves" in candidate or "```" in candidate:
-            text = candidate
-
-    # Prefer the largest fenced code block if any
-    blocks = CODE_BLOCK_RE.findall(text)
-    code = max(blocks, key=len) if blocks else text
-
-    # Strip simple HTML noise (common with some providers)
-    code = re.sub(r"</?span[^>]*>", "", code)
-    code = re.sub(r"</?audio[^>]*>", "", code)
-    code = re.sub(r"</?source[^>]*>", "", code)
-
-    # If function exists, cut everything before it to avoid stray prose
-    if "def neighbor_sort_moves" in code:
-        code = code[code.index("def neighbor_sort_moves"):]
-    return code.strip()
-
 
 CONFIG = {
     'URLS': {
