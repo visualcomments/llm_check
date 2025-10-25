@@ -11,6 +11,42 @@ import threading
 import queue
 import argparse
 
+import re
+
+# --- Normalize/clean model responses to pure Python code ---
+CODE_BLOCK_RE = re.compile(r"```(?:python)?\s*(.*?)```", re.DOTALL | re.IGNORECASE)
+
+def extract_python_code(raw: str) -> str:
+    """Return an importable Python module string.
+    - Picks the largest ```python code block``` if present
+    - Tries to unwrap common provider JSON/dict shells
+    - Strips HTML tags sometimes returned by providers
+    - Trims everything before the required entry function if it exists
+    """
+    if raw is None:
+        return ""
+    text = str(raw)
+
+    # Unwrap very common dict-like payloads that contain 'content'
+    m = re.search(r"'content':\s*'(?P<cont>.*?)'", text, re.DOTALL)
+    if m:
+        candidate = m.group("cont")
+        if "def neighbor_sort_moves" in candidate or "```" in candidate:
+            text = candidate
+
+    # Prefer the largest fenced code block if any
+    blocks = CODE_BLOCK_RE.findall(text)
+    code = max(blocks, key=len) if blocks else text
+
+    # Strip simple HTML noise
+    code = re.sub(r"</?span[^>]*>", "", code)
+
+    # If function exists, cut everything before it to avoid stray prose
+    if "def neighbor_sort_moves" in code:
+        code = code[code.index("def neighbor_sort_moves"):]
+    return code.strip()
+
+
 # Optional: local Hugging Face inference
 _HF_AVAILABLE = False
 try:
@@ -334,7 +370,7 @@ def process_model(model: str, task: str, config: Dict, progress_queue: queue.Que
         progress_queue.put((model, 'done', None))
         return {'model': model, 'iterations': iterations, 'final_code': None}
     
-    current_code = response
+    current_code = extract_python_code(response)
     progress_queue.put((model, 'status', "Initial code received. Executing..."))
     
     # 2) Execution + improvement stages
@@ -372,7 +408,7 @@ def process_model(model: str, task: str, config: Dict, progress_queue: queue.Que
                 progress_queue.put((model, 'status', f"Failed to fix code at stage: {fix_stage}"))
                 progress_queue.put((model, 'done', None))
                 return {'model': model, 'iterations': iterations, 'final_code': None}
-            current_code = response
+            current_code = extract_python_code(response)
         
         # C) Refactor (always attempts this)
         refactor_stage = fix_stage.replace('fix', 'refactor')
@@ -400,7 +436,7 @@ def process_model(model: str, task: str, config: Dict, progress_queue: queue.Que
 
         # If refactor was successful, update codes
         prev_code = current_code
-        current_code = response
+        current_code = extract_python_code(response)
 
     progress_queue.put((model, 'status', 'Completed'))
     progress_queue.put((model, 'log', f"=== FINAL CODE:\n{current_code or 'None'}"))

@@ -9,8 +9,8 @@ from datetime import datetime
 import random
 
 def ensure_output_folder(folder_name: str = "validation_output") -> str:
-    # Use a common results path
-    path = os.path.join("/kaggle/working/", folder_name)
+    BASE_DIR = os.environ.get("RESULTS_BASE", os.getcwd())
+    path = os.path.join(BASE_DIR, folder_name)
     os.makedirs(path, exist_ok=True)
     return path
 
@@ -115,7 +115,7 @@ except Exception as e:
     sys.stdout = _original_stdout
     sys.stderr = _original_stderr
     print(json.dumps({{"error": "Failed to import or find neighbor_sort_moves: " + str(e), "traceback": traceback.format_exc()}}))
-    raise SystemExit(0)
+    raise SystemExit(1)
 finally:
     # Ensure streams are restored even if import fails
     if not sys.stdout.closed:
@@ -155,11 +155,26 @@ def parse_runner_output(text: str) -> List[Dict[str, Any]]:
             pass
     return out
 
+
+
+def _sanitize(code: str) -> str:
+    """Make candidate code importable by stripping markdown fences/HTML and trimming to the entry function."""
+    if not code:
+        return ""
+    CODE_BLOCK_RE = re.compile(r"```(?:python)?\s*(.*?)```", re.DOTALL | re.IGNORECASE)
+    text = str(code)
+    blocks = CODE_BLOCK_RE.findall(text)
+    text = max(blocks, key=len) if blocks else text
+    text = re.sub(r"</?span[^>]*>", "", text)
+    if "def neighbor_sort_moves" in text:
+        text = text[text.index("def neighbor_sort_moves"):]
+    return text.strip()
 def validate_model_code(code: str, model_name: str, vectors_by_n: Dict[int, List[List[int]]], timeout: int = 40) -> Dict[str, Any]:
     validation_folder = ensure_output_folder()
 
     # Create a unique-ish temp file for the harness
     tmp_file = os.path.join(validation_folder, f"temp_validate_{re.sub(r'[^A-Za-z0-9_]+', '_', model_name)}_{int(time.time())}.py")
+    code = _sanitize(code)
     harness = adapt_code_for_testing(code, vectors_by_n)
 
     with open(tmp_file, 'w', encoding='utf-8') as f:
@@ -279,7 +294,8 @@ def validate_model_code(code: str, model_name: str, vectors_by_n: Dict[int, List
     return result
 
 def main():
-    results_dir = "/kaggle/working/run_results"
+    BASE_DIR = os.environ.get("RESULTS_BASE", os.getcwd())
+    results_dir = os.path.join(BASE_DIR, "run_results")
     final_results_file = os.path.join(results_dir, "final_results.json")
     output_filename = "comprehensive_validation.json"
     

@@ -5,7 +5,8 @@ import os
 import sys
 
 def ensure_output_folder(folder_name: str = "validation_output") -> str:
-    path = os.path.join("/kaggle/working/", folder_name)
+    BASE_DIR = os.environ.get("RESULTS_BASE", os.getcwd())
+    path = os.path.join(BASE_DIR, folder_name)
     os.makedirs(path, exist_ok=True)
     return path
 
