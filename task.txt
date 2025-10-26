@@ -1,0 +1,24 @@
+Task: Generate a sequence of CYCLIC-ADJACENT swaps that sorts a list in nondecreasing order.
+
+Function to implement:
+    def neighbor_sort_moves(vec: list) -> list
+
+What to return:
+- A list of index pairs (i, j). Each pair represents a single swap.
+- Applying all swaps in order to a copy of vec must result in a nondecreasing list.
+
+Allowed swaps ONLY:
+- (i, i+1) for i = 0 .. n-2
+- (n-1, 0)  # wrap-around neighbor
+(No other swaps are allowed.)
+
+Constraints:
+- Handle n = 0 or 1 by returning [].
+- Duplicates must be handled correctly.
+- No file/network I/O. No external imports.
+- Return only the moves list (do not print).
+
+Hint (non-binding):
+- Use a simple bubble-like process around the ring: repeatedly compare a[k] and a[(k+1) % n]; 
+  if a[k] > a[(k+1) % n], record the swap (k, (k+1) % n) and perform it on the working copy.
+- Stop early if a full pass makes no swaps, or after at most n*n steps.
