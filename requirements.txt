@@ -1,5 +1,5 @@
 requests
-g4f
+g4f==0.6.3.7
 matplotlib 
 seaborn
 # Optional for --hf_model:
