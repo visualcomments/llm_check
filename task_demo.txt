@@ -4,27 +4,18 @@ You are a senior Python engineer. Implement a very simple algorithm in Python: f
 Write a standalone Python module that defines:
     def find_max(nums: list[int]) -> int:
 
-## Requirements
+## Constraints & Behavior
+- If nums is empty, raise ValueError("empty sequence").
+- Support negative numbers, duplicates, and single-element lists.
 - Do NOT use built-ins that solve the task directly (e.g., max(), sorted(), numpy).
-- Time complexity: O(n). Extra space: O(1) aside from variables.
-- Behavior:
-  - If nums is empty, raise ValueError("empty sequence").
-  - Support negative numbers, duplicates, and single-element lists.
-- Code quality:
-  - Include type hints and a clear docstring with examples.
-  - Keep the implementation short and readable; add minimal explanatory comments.
-  - Follow PEP 8.
+- Time complexity must be O(n).
+- Extra space must be O(1) (aside from simple variables).
+- Do NOT print anything. No file/network I/O. No external imports.
 
-## Tests
-Add a small test suite using Python’s standard library (unittest). Cover at least:
-- Basic case: [3, 1, 7, 2] -> 7
-- All negatives: [-5, -2, -9] -> -2
-- Single element: [42] -> 42
-- Duplicates: [5, 5, 5] -> 5
-- Empty list: [] -> raises ValueError("empty sequence")
+## Code quality
+- Include type hints and a clear docstring (describe behavior and examples).
+- Keep the implementation short and readable; add minimal comments.
+- Follow PEP 8.
 
-## Execution
-- Include the standard test runner guard:
-    if __name__ == "__main__":
-        unittest.main()
+## Answer format
 - The final answer MUST be a single Python code block with no extra commentary.
