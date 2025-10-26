@@ -425,7 +425,7 @@ def main():
         data = json.load(f)
 
     # --- DYNAMIC TASK SELECTION ---
-    task_description = data.get('validation_task', "")
+    task_description = data.get('task_description', "") 
     
     current_function_name: str
     current_test_driver: str
