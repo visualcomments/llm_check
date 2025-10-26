@@ -144,22 +144,23 @@ def run():
     try:
         func = load_func(TMP_FILE, FUNC_NAME)
     except Exception as e:
-        print(json.dumps({"ok": False, "error": f"Import error: {e}"}))
+        print(json.dumps({{"ok": False, "error": f"Import error: {e}"}}))
         return
     TestGoldenSuiteSort.func_to_test = func
     suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(TestGoldenSuiteSort))
     runner = unittest.TextTestRunner(stream=sys.stdout, verbosity=0)
     result = runner.run(suite)
-    payload = {
+    payload = {{
         "ok": result.wasSuccessful(),
         "failures": [(str(t[0]), t[1]) for t in result.failures],
         "errors": [(str(t[0]), t[1]) for t in result.errors],
-    }
+    }}
     print(json.dumps(payload))
 
 if __name__ == "__main__":
     run()
 """
+
 
 TEST_DRIVER_FIND_MAX = r"""
 import sys, json, unittest, importlib.util
