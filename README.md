@@ -1,4 +1,4 @@
-# LLM Code Generation & Validation Pipeline (Fixed Edition)
+# LLM Code Generation & Validation Pipeline
 
 This repository packages a **repeatable pipeline** to prompt Large Language Models (LLMs) to generate Python code, run lightweight self-checks, and then **validate** and **analyze** those results with dedicated scripts.
 
@@ -10,7 +10,7 @@ The repository is intentionally minimal and self-contained:
 - **`requirements.txt`** – Minimal runtime dependencies.
 - **This `README.md`** – You are here.
 
-> **Why this structure?** It makes it easy to conduct apples-to-apples comparisons across models, and to reproduce results end-to-end on any environment (local or cloud).
+
 
 ---
 
