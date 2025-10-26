@@ -235,11 +235,7 @@ def validate_model_code(code: str, model_name: str, vectors_by_n: Dict[int, List
                     if not is_cyclic_neighbor_pair(i, j, len(vec)):
                         raise ValueError(f"Illegal move (not a cyclic neighbor): {mv}")
                     if not (0 <= i < len(vec) and 0 <= j < len(vec)):
-                        # Allow for n=0 case
-                        if len(vec) == 0 and not (i==0 and j==0):
-                             raise IndexError(f"Index out of bounds: {mv} for n=0")
-                        if len(vec) > 0:
-                            raise IndexError(f"Index out of bounds: {mv} for n={len(vec)}")
+                        raise IndexError(f"Index out of bounds: {mv} for n={len(vec)}")
                 
                 # Apply moves
                 after = apply_moves(vec, [(int(i), int(j)) for i, j in moves])

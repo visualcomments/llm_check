@@ -16,47 +16,44 @@ import re  # <<< ИСПРАВЛЕНИЕ: импорт перемещен сюд�
 # Утилиты извлечения кода из ответа LLM
 # -----------------------------
 
+
 def extract_python_code(raw: str) -> str:
     """
-    Возвращает импортируемую строку с Python-модулем из сырого ответа модели.
-    Контракт: модель возвращает JSON {"answer": "<code>"} без лишних ключей.
-    Фолбэки: берём крупнейший блок ```python``` или весь текст, затем
-    обрезаем до входной функции при её наличии.
+    Return an importable Python module string from an LLM response.
+
+    Strategy (robust):
+    1) Prefer the largest fenced code block tagged as python: ```python ... ```.
+    2) Else prefer the largest fenced code block of any language: ``` ... ```.
+    3) Else, if the text contains 'def neighbor_sort_moves', return the WHOLE text (do NOT trim imports/helpers).
+    4) As a last resort, return the raw text.
     """
     if raw is None:
         return ""
-    text = str(raw).strip()
+    text = str(raw)
 
-    # 1) Поиск JSON-объекта с ключом "answer"
-    json_candidate = None
-    for m in re.finditer(r'\{[\s\S]*?\}', text):
-        blob = m.group(0)
-        try:
-            obj = json.loads(blob)
-            if isinstance(obj, dict) and "answer" in obj:
-                json_candidate = obj["answer"]
-                break
-        except Exception:
-            continue
-
-    if json_candidate is not None:
-        code_str = str(json_candidate)
+    # 1) Prefer ```python fenced blocks
+    py_blocks = re.findall(r"```python\s+([\s\S]*?)```", text, flags=re.IGNORECASE)
+    if py_blocks:
+        code_str = max(py_blocks, key=len).strip()
     else:
-        # 2) Фолбэк: вытаскиваем из кодовых блоков
-        CODE_BLOCK_RE = re.compile(r"```(?:python)?\s*(.*?)```", re.DOTALL | re.IGNORECASE)
-        blocks = CODE_BLOCK_RE.findall(text)
-        code_str = max(blocks, key=len) if blocks else text
+        # 2) Any fenced block
+        any_blocks = re.findall(r"```[\w]*\s*([\s\S]*?)```", text, flags=re.IGNORECASE)
+        if any_blocks:
+            code_str = max(any_blocks, key=len).strip()
+        else:
+            # 3) If we at least see the target function name, keep the whole text (to preserve imports/helpers)
+            if "def neighbor_sort_moves" in text:
+                code_str = text.strip()
+            else:
+                # 4) Last resort: raw text (maybe it's already plain code)
+                code_str = text.strip()
 
-    # Удаляем HTML-шумы
+    # Strip trivial HTML noise that sometimes leaks from providers
     code_str = re.sub(r"</?span[^>]*>", "", code_str)
     code_str = re.sub(r"</?audio[^>]*>", "", code_str)
     code_str = re.sub(r"</?source[^>]*>", "", code_str)
 
-    # Обрезаем до входной функции, если она присутствует
-    if "def neighbor_sort_moves" in code_str:
-        code_str = code_str[code_str.index("def neighbor_sort_moves"):]
-
-    return code_str.strip()
+    return code_str
 
 
 # -----------------------------
