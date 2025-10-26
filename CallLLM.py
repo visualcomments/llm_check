@@ -12,17 +12,22 @@ import queue
 import argparse
 import re  # <<< ИСПРАВЛЕНИЕ: импорт перемещен сюда
 
+# -----------------------------
+# Утилиты извлечения кода из ответа LLM
+# -----------------------------
+
 def extract_python_code(raw: str) -> str:
     """
-    Return an importable Python module string.
-    Primary contract: model returns JSON {"answer": "<code>"} with no extra keys.
-    Fallbacks: pick the largest ```python``` code block or trim to the entry function.
+    Возвращает импортируемую строку с Python-модулем из сырого ответа модели.
+    Контракт: модель возвращает JSON {"answer": "<code>"} без лишних ключей.
+    Фолбэки: берём крупнейший блок ```python``` или весь текст, затем
+    обрезаем до входной функции при её наличии.
     """
     if raw is None:
         return ""
     text = str(raw).strip()
 
-    # 1) Try to locate a JSON object with "answer"
+    # 1) Поиск JSON-объекта с ключом "answer"
     json_candidate = None
     for m in re.finditer(r'\{[\s\S]*?\}', text):
         blob = m.group(0)
@@ -37,26 +42,26 @@ def extract_python_code(raw: str) -> str:
     if json_candidate is not None:
         code_str = str(json_candidate)
     else:
-        # 2) Fallback: extract from fenced code
+        # 2) Фолбэк: вытаскиваем из кодовых блоков
         CODE_BLOCK_RE = re.compile(r"```(?:python)?\s*(.*?)```", re.DOTALL | re.IGNORECASE)
         blocks = CODE_BLOCK_RE.findall(text)
         code_str = max(blocks, key=len) if blocks else text
 
-    # Strip simple HTML noise
+    # Удаляем HTML-шумы
     code_str = re.sub(r"</?span[^>]*>", "", code_str)
     code_str = re.sub(r"</?audio[^>]*>", "", code_str)
     code_str = re.sub(r"</?source[^>]*>", "", code_str)
 
-    # Trim to the entry function if present
+    # Обрезаем до входной функции, если она присутствует
     if "def neighbor_sort_moves" in code_str:
         code_str = code_str[code_str.index("def neighbor_sort_moves"):]
 
     return code_str.strip()
 
 
-# import re  <<< ИСПРАВЛЕНИЕ: импорт удален отсюда
-
-# Optional: local Hugging Face inference
+# -----------------------------
+# Опциональная локальная инференс‑ветка HF
+# -----------------------------
 _HF_AVAILABLE = False
 try:
     from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -65,7 +70,9 @@ try:
 except Exception:
     _HF_AVAILABLE = False
 
-# Import Tkinter only if needed to avoid import errors in headless environments
+# -----------------------------
+# Tkinter только при наличии DISPLAY
+# -----------------------------
 try:
     import tkinter as tk
     from tkinter import ttk, scrolledtext, messagebox
@@ -73,7 +80,9 @@ try:
 except Exception:
     _TKINTER_AVAILABLE = False
 
-# Patch for RotatedProvider (used in AnyProvider for rotation)
+# -----------------------------
+# Патч провайдера ротации (для логов AnyProvider)
+# -----------------------------
 import g4f.providers.retry_provider as retry_mod
 OriginalRotatedProvider = retry_mod.RotatedProvider
 
@@ -81,20 +90,19 @@ import g4f
 from g4f import Provider
 from g4f.errors import ModelNotFoundError
 
-# Thread-local storage for passing data within thread contexts
+# Thread-local для сбора логов по каждому треду
 local = threading.local()
 
-# --- Rotated provider with tracking for logs (unchanged semantics, safer state handling) ---
 class TrackedRotated(OriginalRotatedProvider):
     async def create_async_generator(self, model: str, messages: List[Dict], **kwargs):
         if not hasattr(local, 'current_data'):
             local.current_data = {'tried': [], 'errors': {}, 'success': None, 'model': model}
-            local.current_queue = queue.Queue()  # Dummy queue
+            local.current_queue = queue.Queue()
 
         local.current_data['tried'] = []
         local.current_data['errors'] = {}
         local.current_data['success'] = None
-        
+
         if hasattr(local, 'current_queue') and self.providers:
             providers_list = [p.__name__ for p in self.providers]
             local.current_queue.put((model, 'log', f"1) Providers found: {providers_list}"))
@@ -102,16 +110,16 @@ class TrackedRotated(OriginalRotatedProvider):
         for provider_class in self.providers:
             provider_instance = None
             provider_name = provider_class.__name__ if hasattr(provider_class, '__name__') else str(provider_class)
-            
+
             local.current_data['tried'].append(provider_name)
             if hasattr(local, 'current_queue'):
                 local.current_queue.put((model, 'log', f"2) Trying provider: {provider_name}"))
-            
+
             try:
                 provider_instance = provider_class()
                 async for chunk in provider_instance.create_async_generator(model, messages, **kwargs):
                     yield chunk
-                
+
                 if hasattr(local, 'current_queue'):
                     local.current_queue.put((model, 'log', f"3) Success from {provider_name}"))
                     local.current_data['success'] = provider_name
@@ -124,12 +132,16 @@ class TrackedRotated(OriginalRotatedProvider):
                 if provider_instance and hasattr(provider_instance, '__del__'):
                     provider_instance.__del__()
                 continue
-        
+
         raise ModelNotFoundError(f"No working provider found for model {model}", local.current_data['tried'])
 
-# Monkey-patch the default RotatedProvider with our tracked version
+# Monkey‑patch
 retry_mod.RotatedProvider = TrackedRotated
 
+
+# -----------------------------
+# Конфиг (добавлены пресеты и results_dir по умолчанию совместимый с validation_script)
+# -----------------------------
 CONFIG = {
     'URLS': {
         'WORKING_RESULTS': 'https://raw.githubusercontent.com/maruf009sultan/g4f-working/refs/heads/main/working/working_results.txt'
@@ -147,6 +159,19 @@ CONFIG = {
             "4) The function must NOT read input() nor access files/network.\n"
             "5) The module may include helper functions/classes, but the canonical entry point is neighbor_sort_moves(vec).\n"
             "6) Do not print anything besides an optional short demo under if __name__ == \"__main__\": (printing is allowed but not required)."
+        ),
+        # Новый максимально простой для LLM демо‑промпт
+        'DEMO': (
+            "You are a Python expert. Implement a simple, correct CYCLIC-NEIGHBOR bubble sort generator.\n\n"
+            "Task: Write a self-contained module that defines:\n"
+            "    def neighbor_sort_moves(vec: list) -> list\n\n"
+            "Return a list of swaps (i, j) that sorts a copy of 'vec' into nondecreasing order using ONLY cyclic-adjacent swaps:\n"
+            "  • (i, i+1) for i=0..n-2, and • (n-1, 0).\n\n"
+            "Recommended algorithm (easy):\n"
+            "  If n<=1: return [].\n"
+            "  Repeat up to n*n times: for k in 0..n-1, compare a[k] and a[(k+1)%n]; if a[k] > a[(k+1)%n], swap them and record (k,(k+1)%n).\n"
+            "  Stop early if full pass made no swaps.\n\n"
+            "Constraints: no I/O, no external deps. Duplicates must be handled. Return moves only."
         ),
         'FIX': (
             "You are a Python debugging assistant. The following code failed. "
@@ -194,7 +219,8 @@ CONFIG = {
         'ERROR_TIMEOUT': 'Timeout expired during code execution.',
         'ERROR_NO_RESPONSE': 'No response from model.',
         'NUM_REFACTOR_LOOPS': 2,
-        'RESULTS_FOLDER': 'run_results'
+        # По умолчанию — совместимо с validation_script.py
+        'RESULTS_FOLDER': '/kaggle/working/run_results',
     },
     'STAGES': {
         'INITIAL': 'initial_response',
@@ -206,11 +232,15 @@ CONFIG = {
     }
 }
 
+# -----------------------------
+# Выбор моделей к запуску
+# -----------------------------
+
 def get_models_list(config: Dict, args) -> List[str]:
     """
-    Decide which models to run:
-    • If --hf_model is provided and transformers is available: test that single local model.
-    • Else: fetch g4f working list.
+    Возвращает список моделей:
+    • Если есть --hf_model и доступен transformers — тестируем её локально.
+    • Иначе: берём список из g4f working + пересекаем с allowlist через --models (если задан).
     """
     models: List[str] = []
     if args.hf_model:
@@ -227,7 +257,7 @@ def get_models_list(config: Dict, args) -> List[str]:
         text = resp.text
     except requests.RequestException:
         text = ''
-    
+
     working_models = set()
     for line in text.splitlines():
         if config['CONSTANTS']['DELIMITER_MODEL'] in line:
@@ -236,7 +266,7 @@ def get_models_list(config: Dict, args) -> List[str]:
                 model_name = parts[1]
                 if 'flux' not in model_name.lower():
                     working_models.add(model_name)
-    
+
     try:
         from g4f.models import Model
         all_g4f_models = Model.__all__()
@@ -246,7 +276,7 @@ def get_models_list(config: Dict, args) -> List[str]:
         }
     except Exception:
         g4f_models = set()
-    
+
     models = sorted(list(working_models.union(g4f_models)))
     if args.models:
         allow = set(m.strip() for m in args.models.split(",") if m.strip())
@@ -254,15 +284,23 @@ def get_models_list(config: Dict, args) -> List[str]:
     return models
 
 
-# ---------------- Hugging Face local inference -----------------
+# -----------------------------
+# Локальный HF запуск
+# -----------------------------
 _hf_cache = {}
+
 def hf_local_query(model_id_or_path: str, prompt: str, max_new_tokens: int = 800, temperature: float = 0.2) -> Optional[str]:
     if not _HF_AVAILABLE:
         return None
     key = model_id_or_path
     if key not in _hf_cache:
         tokenizer = AutoTokenizer.from_pretrained(model_id_or_path, trust_remote_code=True)
-        model = AutoModelForCausalLM.from_pretrained(model_id_or_path, torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32, device_map="auto", trust_remote_code=True)
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id_or_path,
+            torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+            device_map="auto",
+            trust_remote_code=True,
+        )
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
         _hf_cache[key] = (tokenizer, model)
@@ -275,22 +313,26 @@ def hf_local_query(model_id_or_path: str, prompt: str, max_new_tokens: int = 800
             do_sample=False,
             temperature=temperature,
             eos_token_id=tokenizer.eos_token_id,
-            pad_token_id=tokenizer.pad_token_id
+            pad_token_id=tokenizer.pad_token_id,
         )[0]
     text = tokenizer.decode(output_ids[len(inputs["input_ids"][0]):], skip_special_tokens=True)
     return text.strip()
 
 
+# -----------------------------
+# Унифицированный запрос к LLM (HF локально или g4f)
+# -----------------------------
+
 def llm_query(model: str, prompt: str, retries_config: Dict, config: Dict, progress_queue: queue.Queue, stage: str = None) -> Optional[str]:
     """
-    Queries either (a) local HF model or (b) g4f provider AnyProvider.
+    Опрашивает либо локальную HF‑модель, либо AnyProvider (g4f).
     """
     local.current_model = model
     local.current_queue = progress_queue
     local.current_stage = stage
     local.current_data = {'tried': [], 'errors': {}, 'success': None, 'model': model}
 
-    # Route to Hugging Face local
+    # Локально через HF
     if model.startswith("hf_local::"):
         model_id = model.split("::", 1)[1]
         try:
@@ -300,14 +342,14 @@ def llm_query(model: str, prompt: str, retries_config: Dict, config: Dict, progr
             local.current_data['errors'][model] = str(e)
             return None
 
-    # Default: g4f
+    # Провайдеры g4f
     for attempt in range(retries_config['max_retries'] + 1):
         try:
             response = g4f.ChatCompletion.create(
                 model=model,
                 messages=[{"role": "user", "content": prompt}],
                 provider=Provider.AnyProvider,
-                timeout=config['CONSTANTS']['REQUEST_TIMEOUT']
+                timeout=config['CONSTANTS']['REQUEST_TIMEOUT'],
             )
             if response and str(response).strip():
                 return str(response).strip()
@@ -317,28 +359,29 @@ def llm_query(model: str, prompt: str, retries_config: Dict, config: Dict, progr
             return None
         except Exception:
             pass
-        
+
         if attempt < retries_config['max_retries']:
             time.sleep(retries_config['backoff_factor'] * (2 ** attempt))
 
     return None
 
 
+# -----------------------------
+# Безопасный пробный запуск с таймаутом
+# -----------------------------
+
 def safe_execute(code: str, config: Dict) -> Tuple[bool, str]:
     """
-    Executes Python code in a secure subprocess with a timeout.
-    This is a quick check for syntax errors or simple runtime failures.
+    Выполняет код в подпроцессе с таймаутом — базовая проверка синтаксиса/рантайма.
     """
     try:
-        # We execute the code as a script. If it has an __name__ == "__main__" block,
-        # it will run. This acts as a basic "does it run" filter.
         result = subprocess.run(
             [sys.executable, '-c', code],
             capture_output=True,
             text=True,
             encoding='utf-8',
             errors='replace',
-            timeout=config['CONSTANTS']['EXEC_TIMEOUT']
+            timeout=config['CONSTANTS']['EXEC_TIMEOUT'],
         )
         if result.returncode == 0:
             return True, result.stdout or ''
@@ -350,100 +393,100 @@ def safe_execute(code: str, config: Dict) -> Tuple[bool, str]:
         return False, str(e)
 
 
+# -----------------------------
+# Основной конвейер для одной модели
+# -----------------------------
+
 def process_model(model: str, task: str, config: Dict, progress_queue: queue.Queue) -> Dict:
     """
-    Processes a single model through generation -> (optional) fix -> refactors.
+    Выполняет цикл: генерация → (при необходимости) фиксы → рефакторинги.
     """
     iterations = []
     current_code = None
     prev_code = None
-    
+
     progress_queue.put((model, 'status', f"Starting: {config['STAGES']['INITIAL']}"))
     progress_queue.put((model, 'log', f"=== STARTING MODEL: {model} ==="))
 
-    # 1) Initial query
+    # 1) Начальный запрос
     prompt = config['PROMPTS']['INITIAL'].format(task=task)
     progress_queue.put((model, 'log', f"Stage: {config['STAGES']['INITIAL']}. Firing prompt."))
     response = llm_query(model, prompt, config['RETRIES']['INITIAL'], config, progress_queue, config['STAGES']['INITIAL'])
-    
+
     iterations.append({
         'providers_tried': local.current_data.get('tried', []),
         'success_provider': local.current_data.get('success'),
         'stage': config['STAGES']['INITIAL'],
         'response': response,
-        'error': None if response else config['CONSTANTS']['ERROR_NO_RESPONSE']
+        'error': None if response else config['CONSTANTS']['ERROR_NO_RESPONSE'],
     })
-    
+
     if not response:
         progress_queue.put((model, 'status', f"Failed: {config['STAGES']['INITIAL']}"))
         progress_queue.put((model, 'done', None))
         return {'model': model, 'iterations': iterations, 'final_code': None}
-    
+
     current_code = extract_python_code(response)
     progress_queue.put((model, 'status', "Initial code received. Executing..."))
-    
-    # 2) Execution + improvement stages
-    # Define the pipeline of fix/refactor stages
+
+    # 2) Этапы фиксов/рефакторов
     pipeline_stages = [
-        (config['STAGES']['FIX_INITIAL'], config['PROMPTS']['REFACTOR_NO_PREV'], False), # First fix (if needed) + first refactor
-        (config['STAGES']['FIX_AFTER_REFACTOR'], config['PROMPTS']['REFACTOR'], True)  # Second fix (if needed) + second refactor
+        (CONFIG['STAGES']['FIX_INITIAL'], CONFIG['PROMPTS']['REFACTOR_NO_PREV'], False),
+        (CONFIG['STAGES']['FIX_AFTER_REFACTOR'], CONFIG['PROMPTS']['REFACTOR'], True),
     ]
-    
-    # Add any additional refactor loops
-    for _ in range(config['CONSTANTS']['NUM_REFACTOR_LOOPS']):
-        pipeline_stages.append((config['STAGES']['FIX_LOOP'], config['PROMPTS']['REFACTOR'], True))
+    for _ in range(CONFIG['CONSTANTS']['NUM_REFACTOR_LOOPS']):
+        pipeline_stages.append((CONFIG['STAGES']['FIX_LOOP'], CONFIG['PROMPTS']['REFACTOR'], True))
 
     for fix_stage, refactor_prompt, use_prev in pipeline_stages:
-        # A) Execute current code
+        # A) Пробуем исполнить текущий код
         progress_queue.put((model, 'log', f"Executing code from previous stage..."))
         success_exec, output = safe_execute(current_code, config)
-        
+
         if not success_exec:
-            # B) Fix (if execution failed)
+            # B) Чиним, если упал
             progress_queue.put((model, 'status', f"Execution failed. Attempting fix: {fix_stage}"))
             progress_queue.put((model, 'log', f"Execution failed. Error:\n{output}"))
-            prompt = config['PROMPTS']['FIX'].format(code=current_code, error=str(output))
-            response = llm_query(model, prompt, config['RETRIES']['FIX'], config, progress_queue, fix_stage)
-            
+            prompt = CONFIG['PROMPTS']['FIX'].format(code=current_code, error=str(output))
+            response = llm_query(model, prompt, CONFIG['RETRIES']['FIX'], config, progress_queue, fix_stage)
+
             iterations.append({
                 'providers_tried': local.current_data.get('tried', []),
                 'success_provider': local.current_data.get('success'),
                 'stage': fix_stage,
                 'response': response,
-                'error': None if response else config['CONSTANTS']['ERROR_NO_RESPONSE']
+                'error': None if response else CONFIG['CONSTANTS']['ERROR_NO_RESPONSE'],
             })
-            
+
             if not response:
                 progress_queue.put((model, 'status', f"Failed to fix code at stage: {fix_stage}"))
                 progress_queue.put((model, 'done', None))
                 return {'model': model, 'iterations': iterations, 'final_code': None}
             current_code = extract_python_code(response)
-        
-        # C) Refactor (always attempts this)
+
+        # C) Рефакторим всегда
         refactor_stage = fix_stage.replace('fix', 'refactor')
         progress_queue.put((model, 'status', f"Refactoring code: {refactor_stage}"))
-        
+
         if use_prev:
             prompt = refactor_prompt.format(code=current_code, prev=prev_code)
         else:
             prompt = refactor_prompt.format(code=current_code)
-            
-        response = llm_query(model, prompt, config['RETRIES']['FIX'], config, progress_queue, refactor_stage)
-        
+
+        response = llm_query(model, prompt, CONFIG['RETRIES']['FIX'], config, progress_queue, refactor_stage)
+
         iterations.append({
             'providers_tried': local.current_data.get('tried', []),
             'success_provider': local.current_data.get('success'),
             'stage': refactor_stage,
             'response': response,
-            'error': None if response else config['CONSTANTS']['ERROR_NO_RESPONSE']
+            'error': None if response else CONFIG['CONSTANTS']['ERROR_NO_RESPONSE'],
         })
-        
+
         if not response:
             progress_queue.put((model, 'status', f"Failed to refactor at stage: {refactor_stage}"))
-            # Don't exit, just continue with the *current_code*
+            # Продолжаем с текущим кодом
             continue
 
-        # If refactor was successful, update codes
         prev_code = current_code
         current_code = extract_python_code(response)
 
@@ -453,15 +496,18 @@ def process_model(model: str, task: str, config: Dict, progress_queue: queue.Que
     progress_queue.put((model, 'done', None))
     return {'model': model, 'iterations': iterations, 'final_code': current_code}
 
+
+# -----------------------------
+# Оркестратор
+# -----------------------------
+
 def orchestrator(task: str, models: List[str], config: Dict, progress_queue: queue.Queue) -> Dict:
-    """
-    Manages the parallel processing of all models using a thread pool.
-    """
+    """Параллельный запуск по всем моделям."""
     folder = config['CONSTANTS']['RESULTS_FOLDER']
     os.makedirs(folder, exist_ok=True)
     results = {}
     total_models = len(models)
-    
+
     with ThreadPoolExecutor(max_workers=config['CONSTANTS']['MAX_WORKERS']) as executor:
         future_to_model = {executor.submit(process_model, model, task, config, progress_queue): model for model in models}
         completed = 0
@@ -473,7 +519,7 @@ def orchestrator(task: str, models: List[str], config: Dict, progress_queue: que
             except Exception as e:
                 results[model] = {'model': model, 'iterations': [], 'final_code': None, 'error': str(e)}
                 progress_queue.put((model, 'error', str(e)))
-            
+
             completed += 1
             progress_queue.put(('global', 'progress', (completed, total_models)))
 
@@ -481,26 +527,34 @@ def orchestrator(task: str, models: List[str], config: Dict, progress_queue: que
     final_file = os.path.join(folder, 'final_results.json')
     with open(final_file, 'w', encoding='utf-8') as f:
         json.dump(final_results, f, ensure_ascii=False, indent=4)
-    
+
     progress_queue.put(('global', 'done', f"Processing complete. Final results saved to {final_file}"))
     return final_results
 
-# GUI Class placeholder (optional)
+
+# -----------------------------
+# (Опционально) GUI-заглушка
+# -----------------------------
 if _TKINTER_AVAILABLE:
     class ProgressGUI:
-        # GUI implementation would go here, but is not requested for this fix.
+        # GUI тут не нужен.
         pass
+
+
+# -----------------------------
+# Консольный режим
+# -----------------------------
 
 def run_headless_orchestrator(task: str, models: List[str], config: Dict):
     progress_queue = queue.Queue()
-    
+
     orchestrator_thread = threading.Thread(
         target=orchestrator,
         args=(task, models, config, progress_queue),
-        daemon=True
+        daemon=True,
     )
     orchestrator_thread.start()
-    
+
     completed_count = 0
     total_count = len(models)
     active_model = ""
@@ -523,21 +577,23 @@ def run_headless_orchestrator(task: str, models: List[str], config: Dict):
                 elif msg_type == 'error':
                     active_status = f"ERROR: {data}"
 
-            progress_bar = f"[{'#' * (completed_count * 30 // max(1,total_count))}{'-' * ((total_count - completed_count) * 30 // max(1,total_count))}]"
+            progress_bar = f"[{('#' * (completed_count * 30 // max(1, total_count)))}{('-' * ((total_count - completed_count) * 30 // max(1, total_count)))}]"
             print(f"\rProgress: {completed_count}/{total_count} {progress_bar} | Current: {active_model} - {active_status.ljust(40)}", end="", flush=True)
 
         except queue.Empty:
             continue
-    
+
     print("\n\nAll tasks finished.")
 
 
-def build_task_text() -> str:
-    """
-    Builds the clear, improved task description.
-    """
+# -----------------------------
+# Тексты задач (пресеты)
+# -----------------------------
+
+def build_default_task_text() -> str:
+    """Изначальная формулировка задачи (adjacent + циклическая пара)."""
     return (
-"""
+        """
 Task: Implement a sorting algorithm that uses ONLY adjacent swaps on a vector.
 
 Input: A vector a of length n (0-indexed).
@@ -552,22 +608,74 @@ Do not use any other operations.
 """
     )
 
+
+def build_demo_task_text() -> str:
+    """Упрощённый для LLM демо‑промпт (на основе циклического пузырька)."""
+    return (
+        """
+Task: Sort a list into nondecreasing order by returning a sequence of CYCLIC-ADJACENT swaps only.
+
+Requirements:
+- Define def neighbor_sort_moves(vec: list) -> list
+- Allowed swaps only: (i, i+1) for i=0..n-2 and (n-1, 0)
+- If n<=1: return []
+- Use a bubble-like n*n outer limit with early stop when a full pass makes no swaps.
+- No I/O, no imports, return the *moves list* only.
+
+Tip: On each pass k=0..n-1 compare a[k] and a[(k+1)%n], swap if needed and record the pair.
+"""
+    )
+
+
+def load_task_text(args) -> str:
+    # 1) Внешний файл с задачей имеет приоритет
+    if args.task_file:
+        try:
+            with open(args.task_file, 'r', encoding='utf-8') as f:
+                return f.read()
+        except Exception as e:
+            print(f"[WARN] Failed to read --task-file: {e}. Falling back to preset.")
+    # 2) Пресеты
+    if args.task_preset == 'demo':
+        return build_demo_task_text()
+    return build_default_task_text()
+
+
+# -----------------------------
+# Аргументы CLI (новые: --task-preset, --task-file, --results-dir)
+# -----------------------------
+
 def parse_args():
     p = argparse.ArgumentParser(description="LLM code generation runner with optional local HF model support")
     p.add_argument("--hf_model", type=str, default=None, help="Local Hugging Face model id or path to test (uses transformers).")
     p.add_argument("--models", type=str, default=None, help="Comma-separated allowlist of g4f models to test.")
     p.add_argument("--max_workers", type=int, default=CONFIG['CONSTANTS']['MAX_WORKERS'], help="Thread pool size.")
+    p.add_argument("--task-preset", choices=["default", "demo"], default="default", help="Which built-in task text to use.")
+    p.add_argument("--task-file", type=str, default=None, help="Path to a custom task text file (overrides preset).")
+    p.add_argument("--results-dir", type=str, default=CONFIG['CONSTANTS']['RESULTS_FOLDER'], help="Where to save final_results.json (default matches validation_script).")
     return p.parse_args()
+
+
+# -----------------------------
+# main
+# -----------------------------
 
 def main():
     args = parse_args()
-    CONFIG['CONSTANTS']['MAX_WORKERS'] = int(args.max_workers)
 
-    task_description = build_task_text()
+    # Обновляем конфиг из аргументов
+    CONFIG['CONSTANTS']['MAX_WORKERS'] = int(args.max_workers)
+    if args.results_dir:
+        CONFIG['CONSTANTS']['RESULTS_FOLDER'] = args.results_dir
+
+    # Готовим текст задачи согласно опциям
+    task_description = load_task_text(args)
+    print(f"Using task preset: {('file:'+args.task_file) if args.task_file else args.task_preset}")
+
     print("Selecting models...")
     models = get_models_list(CONFIG, args)
     print(f"Found {len(models)} model(s) to test.")
-    
+
     test_models = models
     if not test_models:
         print("No models found. Exiting.")
@@ -579,6 +687,7 @@ def main():
     else:
         print("Running in headless (console) mode...")
         run_headless_orchestrator(task_description, test_models, CONFIG)
+
 
 if __name__ == "__main__":
     main()

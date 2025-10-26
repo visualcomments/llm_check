@@ -1,8 +1,5 @@
-g4f>=0.3.2
-requests>=2.31.0
-pandas>=2.2.0
-# Optional for local HF models:
-transformers>=4.41.0
-accelerate>=0.30.0
-safetensors>=0.4.3
-# torch is environment-specific; install подходящую сборку вручную (CPU/GPU).
+requests
+g4f
+# Optional for --hf_model:
+transformers
+torch

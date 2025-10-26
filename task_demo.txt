@@ -1,0 +1,8 @@
+Task: Sort a list into nondecreasing order by returning a sequence of CYCLIC-ADJACENT swaps only.
+
+Requirements:
+- Define def neighbor_sort_moves(vec: list) -> list
+- Allowed swaps only: (i, i+1) for i=0..n-2 and (n-1, 0)
+- If n<=1: return []
+- Use a bubble-like n*n outer limit with early stop when a full pass makes no swaps.
+- No I/O, no imports, return the *moves list* only.

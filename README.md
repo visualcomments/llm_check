@@ -1,30 +1,41 @@
-# Neighbor-Transposition Validation — Fixed
+# LLM CodeGen Pipeline (Fixed)
 
-**Date:** 2025-10-25
+Этот архив содержит обновлённый `CallLLM.py` с удобными опциями запуска и совместимостью с `validation_script.py` и `analysis_script.py`.
 
-## What changed
+## Быстрый старт
 
-1. **Response normalization** in `CallLLM.py`:
-   - Added `extract_python_code()` to strip Markdown/HTML/JSON shells.
-   - All `current_code = response` → `current_code = extract_python_code(response)`.
-
-2. **Defensive sanitation** in `validation_script.py`:
-   - Added `_sanitize()` and applied before building the test harness.
-   - Harness exits with non-zero code on import failure.
-   - Portable paths via `RESULTS_BASE` env var (fallback to `os.getcwd()`).
-
-3. **Portable output paths** in `validation_script.py` & `analysis_script.py`:
-   - Removed hardcoded `/kaggle/working` usage.
-
-## How to run
-
+1) Генерация кода с демо-пресетом и путём результатов, ожидаемым валидатором:
 ```bash
-# optional: set a base for results
-export RESULTS_BASE="$(pwd)"
+python CallLLM.py --task-preset demo --results-dir /kaggle/working/run_results
+```
 
-# run validation (expects run_results/final_results.json to exist)
+Опционально:
+- Ограничить модели:
+```bash
+python CallLLM.py --task-preset demo --results-dir /kaggle/working/run_results --models "gpt-4o-mini,gpt-3.5-turbo"
+```
+- Запустить локальную HF-модель:
+```bash
+python CallLLM.py --task-preset demo --results-dir /kaggle/working/run_results --hf_model microsoft/Phi-3-mini-4k-instruct
+```
+
+2) Валидация результатов:
+```bash
 python validation_script.py
+```
 
-# run analysis
+3) Аналитика:
+```bash
 python analysis_script.py
 ```
+
+## Файлы
+- `CallLLM.py` — обновлённый оркестратор с пресетами (`--task-preset demo|default`), `--task-file`, `--results-dir`.
+- `validation_script.py` — валидатор результатов.
+- `analysis_script.py` — анализатор отчёта валидации.
+
+## Требования
+- Python 3.10+
+- `pip install -r requirements.txt`
+
+> Примечание: `transformers`/`torch` нужны только если вы используете `--hf_model`.
