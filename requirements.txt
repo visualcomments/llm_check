@@ -1,5 +1,7 @@
 requests
 g4f
+matplotlib 
+seaborn
 # Optional for --hf_model:
 transformers
 torch

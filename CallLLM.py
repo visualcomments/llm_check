@@ -529,7 +529,13 @@ def orchestrator(task: str, models: List[str], config: Dict, progress_queue: que
             completed += 1
             progress_queue.put(('global', 'progress', (completed, total_models)))
 
-    final_results = {'results': list(results.values()), 'timestamp': datetime.now().isoformat()}
+    # *** УЛУЧШЕНИЕ: Добавляем 'task_description' в итоговый JSON ***
+    final_results = {
+        'task_description': task,
+        'results': list(results.values()), 
+        'timestamp': datetime.now().isoformat()
+    }
+    
     final_file = os.path.join(folder, 'final_results.json')
     with open(final_file, 'w', encoding='utf-8') as f:
         json.dump(final_results, f, ensure_ascii=False, indent=4)
