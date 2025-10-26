@@ -168,13 +168,13 @@ CONFIG = {
             "5. If the task specifies including tests or a main guard (if __name__ == \"__main__\"), you MUST include them."
         ),
         'FIX': (
-            "You are a Python debugging assistant. The following code failed to execute or is incorrect. "
+            "You are a Python debugging assistant. The following code failed a syntax check or a unit test. "
             "Return a corrected, self-contained Python module.\n\n"
             "## Original Task Description\n"
             "{task}\n\n"
             "## Faulty Code\n"
             "{code}\n\n"
-            "## Error Message / Problem\n"
+            "## Error Message / Problem Description\n"
             "{error}\n\n"
             "## Instructions\n"
             "1. Respond with ONLY the corrected, complete Python code module.\n"

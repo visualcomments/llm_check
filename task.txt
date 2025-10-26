@@ -1,68 +1,27 @@
 You are a senior Python engineer. Implement a simple algorithm in Python that produces a sequence of CYCLIC-ADJACENT swaps which, when applied in order, sorts a list in nondecreasing order.
-
 ## Task
 Write a standalone Python module that defines exactly:
     def neighbor_sort_moves(vec: list) -> list:
 This function must return a list of index pairs (i, j) representing swaps.
 Applying all swaps in order to a copy of vec must result in a nondecreasing list.
-
 ## Allowed swaps ONLY
 - Adjacent neighbors: (i, i+1) for i = 0 .. n-2
 - Wrap-around neighbors: (n-1, 0)
 No other swap pairs are permitted.
-
 ## Constraints & Behavior
 - If n == 0 or n == 1, return [].
 - Handle duplicates correctly.
 - Do NOT print anything. No file/network I/O. No external imports.
 - Return only the moves list.
-- Indices must always be valid (0 ≤ i, j < n).
+- Indices must always be valid (0 <= i, j < n).
 - Keep swaps strictly to the allowed neighbor pairs above.
 - Do NOT use built-ins that solve the task directly for you (e.g., calling sort() to derive the move sequence).
-- Time/termination: use a simple bubble-like process around the ring; stop early if a full pass makes no swaps, and in any case cap the process to at most n*n steps to prevent infinite loops.
-
-## Implementation guidance (non-binding)
-- Maintain a working copy of vec.
-- Repeatedly compare a[k] and a[(k+1) % n].
-- If a[k] > a[(k+1) % n], record the swap (k, (k+1) % n), perform it on the working copy, and continue.
-- Track whether any swaps occurred in a full pass; if none, you are done.
-
+- Time/termination: use a simple bubble-like process around the ring;
+stop early if a full pass makes no swaps, and in any case cap the process to at most n*n steps to prevent infinite loops.
 ## Code quality
 - Include type hints and a clear docstring (describe allowed swaps and behavior).
 - Keep the implementation short and readable; add minimal comments.
 - Follow PEP 8.
-
-## Tests
-Add a small unittest suite that verifies:
-1) Empty and single-element lists:
-   - [] -> []
-   - [5] -> []
-2) Already sorted:
-   - [1, 1, 2, 3, 3] -> applying moves yields a nondecreasing list.
-3) Duplicates:
-   - [2, 2, 1, 1, 3] -> applying moves yields [1, 1, 2, 2, 3].
-4) Reverse order:
-   - [5, 4, 3, 2, 1] -> becomes sorted after applying moves.
-5) Mixed/random small:
-   - [3, 1, 4, 1, 5, 9, 2] -> becomes sorted after applying moves.
-6) Legality checks:
-   - Every returned move is either (i, i+1) for some valid i, or (n-1, 0).
-   - All indices are in range for the given n.
-7) Safety bound (for the tested inputs):
-   - len(moves) <= n*n for n = len(vec) (skip when n in {0,1}).
-
-For the tests:
-- Write a helper `apply_moves(a, moves)` that:
-  - Copies `a`,
-  - Applies each swap (including wrap-around (n-1, 0)),
-  - Returns the final list.
-- Assert that `apply_moves(vec, neighbor_sort_moves(vec)) == sorted(vec)`.
-- The tests may use Python’s `sorted` for verification.
-
-## Execution
-- Include the standard test runner guard:
-    if __name__ == "__main__":
-        unittest.main()
 
 ## Answer format
 - The final answer MUST be a single Python code block with no extra commentary.
