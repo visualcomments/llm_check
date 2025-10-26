@@ -11,21 +11,16 @@ import threading
 import queue
 import argparse
 import re
+import tempfile # <-- НОВОЕ ИСПРАВЛЕНИЕ
 
 # -----------------------------
 # Code extraction utilities from LLM response
 # -----------------------------
 
-
 def extract_python_code(raw: str) -> str:
     """
     Return an importable Python module string from an LLM response.
-
-    Strategy (robust):
-    1) Prefer the largest fenced code block tagged as python: ```python ... ```.
-    2) Else prefer the largest fenced code block of any language: ``` ... ```.
-    3) Else, if the text contains 'def ', return the WHOLE text (generic fallback).
-    4) As a last resort, return the raw text.
+    (Код не изменен)
     """
     if raw is None:
         return ""
@@ -58,6 +53,7 @@ def extract_python_code(raw: str) -> str:
 
 # -----------------------------
 # Optional local HF inference branch
+# (Код не изменен)
 # -----------------------------
 _HF_AVAILABLE = False
 try:
@@ -69,6 +65,7 @@ except Exception:
 
 # -----------------------------
 # Tkinter only if DISPLAY is present
+# (Код не изменен)
 # -----------------------------
 try:
     import tkinter as tk
@@ -79,6 +76,7 @@ except Exception:
 
 # -----------------------------
 # Provider rotation patch (for AnyProvider logs)
+# (Код не изменен)
 # -----------------------------
 import g4f.providers.retry_provider as retry_mod
 OriginalRotatedProvider = retry_mod.RotatedProvider
@@ -138,6 +136,7 @@ retry_mod.RotatedProvider = TrackedRotated
 
 # -----------------------------
 # Config (Generic Prompts)
+# (Код не изменен)
 # -----------------------------
 CONFIG = {
     'URLS': {
@@ -235,6 +234,7 @@ CONFIG = {
 
 # -----------------------------
 # Model selection
+# (Код не изменен)
 # -----------------------------
 
 def get_models_list(config: Dict, args) -> List[str]:
@@ -287,6 +287,7 @@ def get_models_list(config: Dict, args) -> List[str]:
 
 # -----------------------------
 # Local HF execution
+# (Код не изменен)
 # -----------------------------
 _hf_cache = {}
 
@@ -322,6 +323,7 @@ def hf_local_query(model_id_or_path: str, prompt: str, max_new_tokens: int = 150
 
 # -----------------------------
 # Unified query to LLM (local HF or g4f)
+# (Код не изменен)
 # -----------------------------
 
 def llm_query(model: str, prompt: str, retries_config: Dict, config: Dict, progress_queue: queue.Queue, stage: str = None) -> Optional[str]:
@@ -369,35 +371,50 @@ def llm_query(model: str, prompt: str, retries_config: Dict, config: Dict, progr
 
 # -----------------------------
 # Safe trial execution with timeout
+# --- ИСПРАВЛЕННАЯ ВЕРСИЯ ---
 # -----------------------------
 
 def safe_execute(code: str, config: Dict) -> Tuple[bool, str]:
     """
-    Executes code in a subprocess with a timeout — basic syntax/runtime check.
-    NOTE: This uses '-c' and will NOT run 'if __name__ == "__main__":' blocks.
-    It is only for checking importability and syntax.
+    Executes code in a subprocess by writing it to a temp file.
+    This allows the 'if __name__ == "__main__":' block to run,
+    executing the model's self-contained unit tests.
     """
+    if not code:
+        return False, "No code provided to execute."
+
     try:
-        result = subprocess.run(
-            [sys.executable, '-c', code],
-            capture_output=True,
-            text=True,
-            encoding='utf-8',
-            errors='replace',
-            timeout=config['CONSTANTS']['EXEC_TIMEOUT'],
-        )
+        # Создаем временный файл, который будет автоматически удален
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=True, encoding='utf-8') as temp_file:
+            temp_file.write(code)
+            temp_file.flush()  # Гарантируем, что все записано на диск
+
+            # Запускаем файл python, а не строку
+            result = subprocess.run(
+                [sys.executable, temp_file.name], # <-- ИЗМЕНЕНИЕ: Запускаем файл
+                capture_output=True,
+                text=True,
+                encoding='utf-8',
+                errors='replace',
+                timeout=config['CONSTANTS']['EXEC_TIMEOUT'],
+            )
+
         if result.returncode == 0:
-            return True, result.stdout or ''
+            # Успех, если код 0. stdout может содержать 'OK' от тестов.
+            return True, result.stdout or 'Execution successful (stdout empty).'
         else:
-            return False, result.stderr or 'Unknown error during execution.'
+            # Провал. stderr будет содержать SyntaxError или ошибки unittest
+            return False, result.stderr or 'Unknown error during execution (stderr empty).'
+            
     except subprocess.TimeoutExpired:
         return False, config['CONSTANTS']['ERROR_TIMEOUT']
     except Exception as e:
-        return False, str(e)
+        return False, f"Failed to execute temp file: {e}"
 
 
 # -----------------------------
 # Main pipeline for a single model
+# (Код не изменен)
 # -----------------------------
 
 def process_model(model: str, task: str, config: Dict, progress_queue: queue.Queue) -> Dict:
@@ -443,6 +460,8 @@ def process_model(model: str, task: str, config: Dict, progress_queue: queue.Que
     for fix_stage, refactor_prompt, use_prev in pipeline_stages:
         # A) Try to execute the current code
         progress_queue.put((model, 'log', f"Executing code from previous stage..."))
+        
+        # <-- ТЕПЕРЬ ЭТА ФУНКЦИЯ ЗАПУСКАЕТ UNIT-ТЕСТЫ -->
         success_exec, output = safe_execute(current_code, config)
 
         if not success_exec:
@@ -505,6 +524,7 @@ def process_model(model: str, task: str, config: Dict, progress_queue: queue.Que
 
 # -----------------------------
 # Orchestrator
+# (Код не изменен)
 # -----------------------------
 
 def orchestrator(task: str, models: List[str], config: Dict, progress_queue: queue.Queue) -> Dict:
@@ -546,6 +566,7 @@ def orchestrator(task: str, models: List[str], config: Dict, progress_queue: que
 
 # -----------------------------
 # (Optional) GUI stub
+# (Код не изменен)
 # -----------------------------
 if _TKINTER_AVAILABLE:
     class ProgressGUI:
@@ -555,6 +576,7 @@ if _TKINTER_AVAILABLE:
 
 # -----------------------------
 # Console mode
+# (Код не изменен)
 # -----------------------------
 
 def run_headless_orchestrator(task: str, models: List[str], config: Dict):
@@ -600,6 +622,7 @@ def run_headless_orchestrator(task: str, models: List[str], config: Dict):
 
 # -----------------------------
 # Task texts (presets)
+# (Код не изменен)
 # -----------------------------
 
 def build_default_task_text() -> str:
@@ -629,12 +652,6 @@ No other swap pairs are permitted.
 - Do NOT use built-ins that solve the task directly for you (e.g., calling sort() to derive the move sequence).
 - Time/termination: use a simple bubble-like process around the ring;
 stop early if a full pass makes no swaps, and in any case cap the process to at most n*n steps to prevent infinite loops.
-
-## Implementation guidance (non-binding)
-- Maintain a working copy of vec.
-- Repeatedly compare a[k] and a[(k+1) % n].
-- If a[k] > a[(k+1) % n], record the swap (k, (k+1) % n), perform it on the working copy, and continue.
-- Track whether any swaps occurred in a full pass; if none, you are done.
 
 ## Code quality
 - Include type hints and a clear docstring (describe allowed swaps and behavior).
@@ -733,6 +750,7 @@ def load_task_text(args) -> str:
 
 # -----------------------------
 # CLI arguments
+# (Код не изменен)
 # -----------------------------
 
 def parse_args():
@@ -748,6 +766,7 @@ def parse_args():
 
 # -----------------------------
 # main
+# (Код не изменен)
 # -----------------------------
 
 def main():
