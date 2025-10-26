@@ -10,7 +10,6 @@ The repository is intentionally minimal and self-contained:
 - **`requirements.txt`** – Minimal runtime dependencies.
 - **This `README.md`** – You are here.
 
-> **Why this structure?** It makes it easy to conduct apples-to-apples comparisons across models, and to reproduce results end-to-end on any environment (local or cloud).
 
 ---
 
