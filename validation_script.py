@@ -250,18 +250,24 @@ except Exception as e:
     print(json.dumps({{"overall_success": False, "error_log": f"Subprocess load failed: {{e}}", "test_results": []}}))
     sys.exit(0)
 
-suite = unittest.TestLoader().loadTestsFromTestCase(TestGoldenSuiteSort)
+loader = unittest.TestLoader()
+suite = loader.loadTestsFromTestCase(TestGoldenSuiteSort)
+all_test_names = loader.getTestCaseNames(TestGoldenSuiteSort) # <-- ПОЛУЧАЕМ ИМЕНА
+
 stream = io.StringIO()
 runner = unittest.TextTestRunner(stream=stream, verbosity=0)
 result = runner.run(suite)
 output = stream.getvalue()
 
 test_results = []
+failed_tests = set() # <-- ИСПОЛЬЗУЕМ SET
 for test, err in result.failures + result.errors:
-    test_results.append({{"test_name": test.id().split('.')[-1], "success": False, "error": str(err)}})
-for test in result.testsRun:
     test_name = test.id().split('.')[-1]
-    if test_name not in [t["test_name"] for t in test_results]:
+    test_results.append({{"test_name": test_name, "success": False, "error": str(err)}})
+    failed_tests.add(test_name)
+
+for test_name in all_test_names: # <-- ИТЕРИРУЕМ ПО ИМЕНАМ
+    if test_name not in failed_tests:
         test_results.append({{"test_name": test_name, "success": True, "error": None}})
 
 print(json.dumps({{
