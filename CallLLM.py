@@ -10,6 +10,7 @@ from datetime import datetime
 import threading
 import queue
 import argparse
+import re  # <<< ИСПРАВЛЕНИЕ: импорт перемещен сюда
 
 def extract_python_code(raw: str) -> str:
     """
@@ -53,7 +54,7 @@ def extract_python_code(raw: str) -> str:
     return code_str.strip()
 
 
-import re
+# import re  <<< ИСПРАВЛЕНИЕ: импорт удален отсюда
 
 # Optional: local Hugging Face inference
 _HF_AVAILABLE = False
