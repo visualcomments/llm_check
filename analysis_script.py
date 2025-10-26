@@ -5,6 +5,7 @@ import os
 import sys
 
 def ensure_output_folder(folder_name: str = "validation_output") -> str:
+    """Ensures the output folder exists."""
     path = os.path.join("/kaggle/working/", folder_name)
     os.makedirs(path, exist_ok=True)
     return path
@@ -22,42 +23,7 @@ def main():
     with open(validation_file, 'r', encoding='utf-8') as f:
         data = json.load(f)
 
-    models_data = []
-    n_values = []
-    
-    if data.get('models'):
-        # Find all 'n' values tested by inspecting the first model result
-        sample = data['models'][0].get('results_by_n', {})
-        n_values = sorted(int(k) for k in sample.keys())
-
-    print(f"Found test data for n values: {n_values}")
-
-    for model_results in data.get('models', []):
-        if not model_results.get('results_by_n'):
-            continue
-        
-        total_ns = len(model_results['results_by_n'])
-        succ_ns = sum(1 for n in model_results['results_by_n'].values() if n.get('validation_passed'))
-        rate = succ_ns / total_ns if total_ns else 0
-        
-        model_info = {
-            'model': model_results['model'],
-            'overall_success': model_results['overall_success'],
-            'successful_n_count': succ_ns,
-            'total_n_tested': total_ns,
-            'success_rate': round(rate, 3)
-        }
-        
-        # Aggregate stats per 'n'
-        for n in n_values:
-            n_str = str(n)
-            n_result = model_results['results_by_n'].get(n_str, {})
-            model_info[f'n_{n}_passed'] = n_result.get('validation_passed', False)
-            model_info[f'n_{n}_vectors_total'] = n_result.get('vectors_total', 0)
-            model_info[f'n_{n}_vectors_ok'] = n_result.get('vectors_passed', 0)
-            model_info[f'n_{n}_vectors_run'] = n_result.get('vectors_run', 0)
-        
-        models_data.append(model_info)
+    models_data = data.get('models', [])
     
     if not models_data:
         print("No model data found to analyze.")
@@ -66,29 +32,27 @@ def main():
     df = pd.DataFrame(models_data)
     
     print("\n" + "="*70)
-    print("ANALYSIS: Sorting-by-Neighbor-Transpositions Task")
+    print("ANALYSIS: Generic Code Validation (Unittest Execution)")
+    print(f"Task: {data.get('validation_task', 'Unknown')}")
     print("="*70)
     
     total_models = len(df)
     successful_models = df['overall_success'].sum()
-    print(f"\nOverall Success Rate: {successful_models}/{total_models} ({(successful_models/total_models if total_models else 0):.1%}) models passed all n.")
+    success_rate = (successful_models / total_models) if total_models else 0
     
-    print("\nPer-n pass rates (percent of models that passed all vectors for n):")
-    for n in n_values:
-        col = f'n_{n}_passed'
-        if col in df.columns:
-            rate = df[col].mean()
-            print(f"  n={n}: {rate:.1%}")
+    print(f"\nOverall Success Rate: {successful_models}/{total_models} ({success_rate:.1%}) models passed all tests.")
     
-    print("\nTop 10 Models by success_rate (passed all vectors for the most n's):")
-    top = df.nlargest(10, 'success_rate')[['model', 'success_rate', 'successful_n_count', 'total_n_tested']]
-    print(top.to_string(index=False))
+    print(f"\nTop {min(10, successful_models)} Successful Models (random sample):")
+    successful_df = df[df['overall_success'] == True]
+    print(successful_df.head(10)[['model', 'overall_success']].to_string(index=False))
+
+    print(f"\n{total_models - successful_models} Failed Models:")
+    failed_df = df[df['overall_success'] == False]
     
-    print("\nModels that failed all tests (success_rate == 0):")
-    failed = df[df['success_rate'] == 0]
-    print(f"  {len(failed)}/{total_models} models failed all n values.")
-    if not failed.empty and len(failed) < 20:
-        print("\n".join(failed['model'].tolist()))
+    # Clean up error logs for display
+    failed_df['error_summary'] = failed_df['error_log'].str.splitlines().str[-1].str.slice(0, 100)
+    print(failed_df[['model', 'error_summary']].to_string(index=False))
+
     
     # Save reports
     report = {
@@ -96,8 +60,8 @@ def main():
         'summary': {
             'total_models_analyzed': total_models,
             'fully_successful_models': int(successful_models),
-            'overall_success_rate': (successful_models/total_models if total_models else 0),
-            'n_values_tested': n_values
+            'overall_success_rate': success_rate,
+            'task': data.get('validation_task', 'Unknown')
         },
         'all_model_results': models_data
     }

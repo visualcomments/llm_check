@@ -10,7 +10,7 @@ from datetime import datetime
 import threading
 import queue
 import argparse
-import re  # <<< FIX: import moved here
+import re
 
 # -----------------------------
 # Code extraction utilities from LLM response
@@ -24,7 +24,8 @@ def extract_python_code(raw: str) -> str:
     Strategy (robust):
     1) Prefer the largest fenced code block tagged as python: ```python ... ```.
     2) Else prefer the largest fenced code block of any language: ``` ... ```.
-    3) As a last resort, return the raw text.
+    3) Else, if the text contains 'def ', return the WHOLE text (generic fallback).
+    4) As a last resort, return the raw text.
     """
     if raw is None:
         return ""
@@ -40,8 +41,12 @@ def extract_python_code(raw: str) -> str:
         if any_blocks:
             code_str = max(any_blocks, key=len).strip()
         else:
-            # 3) Last resort: raw text (maybe it's already plain code)
-            code_str = text.strip()
+            # 3) If we at least see a function definition, keep the whole text
+            if "def " in text:
+                code_str = text.strip()
+            else:
+                # 4) Last resort: raw text (maybe it's already plain code)
+                code_str = text.strip()
 
     # Strip trivial HTML noise that sometimes leaks from providers
     code_str = re.sub(r"</?span[^>]*>", "", code_str)
@@ -132,7 +137,7 @@ retry_mod.RotatedProvider = TrackedRotated
 
 
 # -----------------------------
-# Config (added presets and results_dir default compatible with validation_script)
+# Config (Generic Prompts)
 # -----------------------------
 CONFIG = {
     'URLS': {
@@ -150,8 +155,8 @@ CONFIG = {
             "4. Do NOT read from input(), write to files, or access the network unless the task explicitly requires it.\n"
             "5. If the task specifies including tests or a main guard (if __name__ == \"__main__\"), you MUST include them."
         ),
-        # DEMO prompt is now loaded via build_demo_task_text()
         'DEMO': (
+            # This is just a fallback, the task preset loader is now the main source
             "You are a professional Python programming assistant. Write a correct, functional, and immediately executable Python module to solve the task below.\n\n"
             "## Full Task Description\n"
             "{task}\n\n"
@@ -216,7 +221,6 @@ CONFIG = {
         'ERROR_TIMEOUT': 'Timeout expired during code execution.',
         'ERROR_NO_RESPONSE': 'No response from model.',
         'NUM_REFACTOR_LOOPS': 2,
-        # Default - compatible with validation_script.py
         'RESULTS_FOLDER': '/kaggle/working/run_results',
     },
     'STAGES': {
@@ -286,7 +290,7 @@ def get_models_list(config: Dict, args) -> List[str]:
 # -----------------------------
 _hf_cache = {}
 
-def hf_local_query(model_id_or_path: str, prompt: str, max_new_tokens: int = 800, temperature: float = 0.2) -> Optional[str]:
+def hf_local_query(model_id_or_path: str, prompt: str, max_new_tokens: int = 1500, temperature: float = 0.2) -> Optional[str]:
     if not _HF_AVAILABLE:
         return None
     key = model_id_or_path
@@ -370,6 +374,8 @@ def llm_query(model: str, prompt: str, retries_config: Dict, config: Dict, progr
 def safe_execute(code: str, config: Dict) -> Tuple[bool, str]:
     """
     Executes code in a subprocess with a timeout — basic syntax/runtime check.
+    NOTE: This uses '-c' and will NOT run 'if __name__ == "__main__":' blocks.
+    It is only for checking importability and syntax.
     """
     try:
         result = subprocess.run(
@@ -443,6 +449,8 @@ def process_model(model: str, task: str, config: Dict, progress_queue: queue.Que
             # B) Fix if it failed
             progress_queue.put((model, 'status', f"Execution failed. Attempting fix: {fix_stage}"))
             progress_queue.put((model, 'log', f"Execution failed. Error:\n{output}"))
+            
+            # *** MODIFICATION: Added 'task=task' to FIX prompt ***
             prompt = CONFIG['PROMPTS']['FIX'].format(task=task, code=current_code, error=str(output))
             response = llm_query(model, prompt, CONFIG['RETRIES']['FIX'], config, progress_queue, fix_stage)
 
@@ -464,6 +472,7 @@ def process_model(model: str, task: str, config: Dict, progress_queue: queue.Que
         refactor_stage = fix_stage.replace('fix', 'refactor')
         progress_queue.put((model, 'status', f"Refactoring code: {refactor_stage}"))
 
+        # *** MODIFICATION: Added 'task=task' to REFACTOR prompts ***
         if use_prev:
             prompt = refactor_prompt.format(task=task, code=current_code, prev=prev_code)
         else:
@@ -588,7 +597,7 @@ def run_headless_orchestrator(task: str, models: List[str], config: Dict):
 # -----------------------------
 
 def build_default_task_text() -> str:
-    """The full 'neighbor_sort_moves' task (from task.txt)."""
+    """The 'neighbor_sort_moves' task (from task.txt)."""
     return (
         """
 You are a senior Python engineer. Implement a simple algorithm in Python that produces a sequence of CYCLIC-ADJACENT swaps which, when applied in order, sorts a list in nondecreasing order.
@@ -717,7 +726,7 @@ def load_task_text(args) -> str:
 
 
 # -----------------------------
-# CLI arguments (new: --task-preset, --task-file, --results-dir)
+# CLI arguments
 # -----------------------------
 
 def parse_args():
@@ -745,7 +754,7 @@ def main():
 
     # Prepare the task text according to options
     task_description = load_task_text(args)
-    print(f"Using task preset: {('file:'+args.task_file) if args.task_file else args.task_preset}")
+    print(f"Using task: {('file:'+args.task_file) if args.task_file else args.task_preset}")
 
     print("Selecting models...")
     models = get_models_list(CONFIG, args)
