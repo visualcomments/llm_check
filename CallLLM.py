@@ -10,10 +10,10 @@ from datetime import datetime
 import threading
 import queue
 import argparse
-import re  # <<< ИСПРАВЛЕНИЕ: импорт перемещен сюда
+import re  # <<< FIX: import moved here
 
 # -----------------------------
-# Утилиты извлечения кода из ответа LLM
+# Code extraction utilities from LLM response
 # -----------------------------
 
 
@@ -24,8 +24,7 @@ def extract_python_code(raw: str) -> str:
     Strategy (robust):
     1) Prefer the largest fenced code block tagged as python: ```python ... ```.
     2) Else prefer the largest fenced code block of any language: ``` ... ```.
-    3) Else, if the text contains 'def neighbor_sort_moves', return the WHOLE text (do NOT trim imports/helpers).
-    4) As a last resort, return the raw text.
+    3) As a last resort, return the raw text.
     """
     if raw is None:
         return ""
@@ -41,12 +40,8 @@ def extract_python_code(raw: str) -> str:
         if any_blocks:
             code_str = max(any_blocks, key=len).strip()
         else:
-            # 3) If we at least see the target function name, keep the whole text (to preserve imports/helpers)
-            if "def neighbor_sort_moves" in text:
-                code_str = text.strip()
-            else:
-                # 4) Last resort: raw text (maybe it's already plain code)
-                code_str = text.strip()
+            # 3) Last resort: raw text (maybe it's already plain code)
+            code_str = text.strip()
 
     # Strip trivial HTML noise that sometimes leaks from providers
     code_str = re.sub(r"</?span[^>]*>", "", code_str)
@@ -57,7 +52,7 @@ def extract_python_code(raw: str) -> str:
 
 
 # -----------------------------
-# Опциональная локальная инференс‑ветка HF
+# Optional local HF inference branch
 # -----------------------------
 _HF_AVAILABLE = False
 try:
@@ -68,7 +63,7 @@ except Exception:
     _HF_AVAILABLE = False
 
 # -----------------------------
-# Tkinter только при наличии DISPLAY
+# Tkinter only if DISPLAY is present
 # -----------------------------
 try:
     import tkinter as tk
@@ -78,7 +73,7 @@ except Exception:
     _TKINTER_AVAILABLE = False
 
 # -----------------------------
-# Патч провайдера ротации (для логов AnyProvider)
+# Provider rotation patch (for AnyProvider logs)
 # -----------------------------
 import g4f.providers.retry_provider as retry_mod
 OriginalRotatedProvider = retry_mod.RotatedProvider
@@ -87,7 +82,7 @@ import g4f
 from g4f import Provider
 from g4f.errors import ModelNotFoundError
 
-# Thread-local для сбора логов по каждому треду
+# Thread-local for collecting logs per thread
 local = threading.local()
 
 class TrackedRotated(OriginalRotatedProvider):
@@ -132,74 +127,79 @@ class TrackedRotated(OriginalRotatedProvider):
 
         raise ModelNotFoundError(f"No working provider found for model {model}", local.current_data['tried'])
 
-# Monkey‑patch
+# Monkey-patch
 retry_mod.RotatedProvider = TrackedRotated
 
 
 # -----------------------------
-# Конфиг (добавлены пресеты и results_dir по умолчанию совместимый с validation_script)
+# Config (added presets and results_dir default compatible with validation_script)
 # -----------------------------
 CONFIG = {
     'URLS': {
-        'WORKING_RESULTS': 'https://raw.githubusercontent.com/maruf009sultan/g4f-working/refs/heads/main/working/working_results.txt'
+        'WORKING_RESULTS': '[https://raw.githubusercontent.com/maruf009sultan/g4f-working/refs/heads/main/working/working_results.txt](https://raw.githubusercontent.com/maruf009sultan/g4f-working/refs/heads/main/working/working_results.txt)'
     },
     'PROMPTS': {
         'INITIAL': (
             "You are a professional Python programming assistant. Write a correct, functional, and immediately executable Python module to solve the task below.\n\n"
+            "## Full Task Description\n"
             "{task}\n\n"
-            "STRICT RULES:\n"
-            "1) Respond with ONLY Python code. No explanations or Markdown.\n"
-            "2) The module must be self-contained and importable. It MUST define the function:\n"
-            "   def neighbor_sort_moves(vec: list) -> list:\n"
-            "   which returns a list of swap pairs (i, j).\n"
-            "3) Each pair (i, j) must be a CYCLIC NEIGHBOR transposition. This means either j == (i+1) mod n OR i == (j+1) mod n, where n=len(vec).\n"
-            "4) The function must NOT read input() nor access files/network.\n"
-            "5) The module may include helper functions/classes, but the canonical entry point is neighbor_sort_moves(vec).\n"
-            "6) Do not print anything besides an optional short demo under if __name__ == \"__main__\": (printing is allowed but not required)."
+            "## Strict Rules\n"
+            "1. Respond with ONLY the complete Python code module. Do not add any explanations, preamble, or markdown formatting around the code block.\n"
+            "2. The code must be self-contained, importable, and executable.\n"
+            "3. The code MUST implement all requirements, functions, and behaviors specified in the task description.\n"
+            "4. Do NOT read from input(), write to files, or access the network unless the task explicitly requires it.\n"
+            "5. If the task specifies including tests or a main guard (if __name__ == \"__main__\"), you MUST include them."
         ),
-        # Новый максимально простой для LLM демо‑промпт
+        # DEMO prompt is now loaded via build_demo_task_text()
         'DEMO': (
-            "You are a Python expert. Implement a simple, correct CYCLIC-NEIGHBOR bubble sort generator.\n\n"
-            "Task: Write a self-contained module that defines:\n"
-            "    def neighbor_sort_moves(vec: list) -> list\n\n"
-            "Return a list of swaps (i, j) that sorts a copy of 'vec' into nondecreasing order using ONLY cyclic-adjacent swaps:\n"
-            "  • (i, i+1) for i=0..n-2, and • (n-1, 0).\n\n"
-            "Recommended algorithm (easy):\n"
-            "  If n<=1: return [].\n"
-            "  Repeat up to n*n times: for k in 0..n-1, compare a[k] and a[(k+1)%n]; if a[k] > a[(k+1)%n], swap them and record (k,(k+1)%n).\n"
-            "  Stop early if full pass made no swaps.\n\n"
-            "Constraints: no I/O, no external deps. Duplicates must be handled. Return moves only."
+            "You are a professional Python programming assistant. Write a correct, functional, and immediately executable Python module to solve the task below.\n\n"
+            "## Full Task Description\n"
+            "{task}\n\n"
+            "## Strict Rules\n"
+            "1. Respond with ONLY the complete Python code module. Do not add any explanations, preamble, or markdown formatting around the code block.\n"
+            "2. The code must be self-contained, importable, and executable.\n"
+            "3. The code MUST implement all requirements, functions, and behaviors specified in the task description.\n"
+            "4. Do NOT read from input(), write to files, or access the network unless the task explicitly requires it.\n"
+            "5. If the task specifies including tests or a main guard (if __name__ == \"__main__\"), you MUST include them."
         ),
         'FIX': (
-            "You are a Python debugging assistant. The following code failed. "
-            "Return a corrected module that:\n"
-            "• defines def neighbor_sort_moves(vec: list) -> list\n"
-            "• uses ONLY cyclic neighbor transpositions (i, j), where j == (i+1) mod n OR i == (j+1) mod n.\n"
-            "• is importable and self-contained; no input() or external files.\n\n"
-            "Faulty Code:\n{code}\n\n"
-            "Error Message:\n{error}\n\n"
-            "IMPORTANT: Respond with ONLY the corrected Python code."
+            "You are a Python debugging assistant. The following code failed to execute or is incorrect. "
+            "Return a corrected, self-contained Python module.\n\n"
+            "## Original Task Description\n"
+            "{task}\n\n"
+            "## Faulty Code\n"
+            "{code}\n\n"
+            "## Error Message / Problem\n"
+            "{error}\n\n"
+            "## Instructions\n"
+            "1. Respond with ONLY the corrected, complete Python code module.\n"
+            "2. Ensure the new code correctly implements all requirements from the Original Task Description.\n"
+            "3. Do not add any explanations or markdown formatting."
         ),
         'REFACTOR_NO_PREV': (
-            "You are a Python optimization expert. Refactor and improve the following module without changing the public API:\n\n"
+            "You are a Python optimization expert. Refactor and improve the following module without changing its public API or behavior as defined by the task.\n\n"
+            "## Original Task Description\n"
+            "{task}\n\n"
+            "## Code to Refactor\n"
             "{code}\n\n"
-            "Requirements:\n"
-            "• Keep def neighbor_sort_moves(vec: list) -> list\n"
-            "• Use ONLY cyclic neighbor transpositions (i, j), where j == (i+1) mod n OR i == (j+1) mod n.\n"
-            "• Improve readability, performance, and correctness.\n"
-            "• Keep it self-contained and importable.\n"
-            "Respond with ONLY the refactored code."
+            "## Instructions\n"
+            "1. Improve readability, performance, and correctness while adhering strictly to the Original Task Description.\n"
+            "2. Keep the module self-contained and importable.\n"
+            "3. Respond with ONLY the refactored, complete Python code module. No explanations."
         ),
         'REFACTOR': (
-            "You are a Python optimization expert. Compare the current and previous versions and produce the best refactored module.\n\n"
-            "Current Code:\n{code}\n\n"
-            "Previous Version:\n{prev}\n\n"
-            "Requirements:\n"
-            "• Keep def neighbor_sort_moves(vec: list) -> list\n"
-            "• Use ONLY cyclic neighbor transpositions (i, j), where j == (i+1) mod n OR i == (j+1) mod n.\n"
-            "• Improve readability, performance, and correctness.\n"
-            "• Keep it self-contained and importable.\n"
-            "Respond with ONLY the newest, refactored code."
+            "You are a Python optimization expert. Compare the current and previous versions and produce the best refactored module that satisfies the task.\n\n"
+            "## Original Task Description\n"
+            "{task}\n\n"
+            "## Current Code\n"
+            "{code}\n\n"
+            "## Previous Version (for reference)\n"
+            "{prev}\n\n"
+            "## Instructions\n"
+            "1. Produce the best possible implementation based on the Original Task Description.\n"
+            "2. Improve readability, performance, and correctness.\n"
+            "3. Keep the module self-contained and importable.\n"
+            "4. Respond with ONLY the newest, refactored, complete Python code module. No explanations."
         )
     },
     'RETRIES': {
@@ -216,7 +216,7 @@ CONFIG = {
         'ERROR_TIMEOUT': 'Timeout expired during code execution.',
         'ERROR_NO_RESPONSE': 'No response from model.',
         'NUM_REFACTOR_LOOPS': 2,
-        # По умолчанию — совместимо с validation_script.py
+        # Default - compatible with validation_script.py
         'RESULTS_FOLDER': '/kaggle/working/run_results',
     },
     'STAGES': {
@@ -230,14 +230,14 @@ CONFIG = {
 }
 
 # -----------------------------
-# Выбор моделей к запуску
+# Model selection
 # -----------------------------
 
 def get_models_list(config: Dict, args) -> List[str]:
     """
-    Возвращает список моделей:
-    • Если есть --hf_model и доступен transformers — тестируем её локально.
-    • Иначе: берём список из g4f working + пересекаем с allowlist через --models (если задан).
+    Returns a list of models:
+    • If --hf_model is provided and transformers is available, test it locally.
+    • Otherwise: get the list from g4f working + intersect with allowlist via --models (if given).
     """
     models: List[str] = []
     if args.hf_model:
@@ -282,7 +282,7 @@ def get_models_list(config: Dict, args) -> List[str]:
 
 
 # -----------------------------
-# Локальный HF запуск
+# Local HF execution
 # -----------------------------
 _hf_cache = {}
 
@@ -317,19 +317,19 @@ def hf_local_query(model_id_or_path: str, prompt: str, max_new_tokens: int = 800
 
 
 # -----------------------------
-# Унифицированный запрос к LLM (HF локально или g4f)
+# Unified query to LLM (local HF or g4f)
 # -----------------------------
 
 def llm_query(model: str, prompt: str, retries_config: Dict, config: Dict, progress_queue: queue.Queue, stage: str = None) -> Optional[str]:
     """
-    Опрашивает либо локальную HF‑модель, либо AnyProvider (g4f).
+    Queries either a local HF model or AnyProvider (g4f).
     """
     local.current_model = model
     local.current_queue = progress_queue
     local.current_stage = stage
     local.current_data = {'tried': [], 'errors': {}, 'success': None, 'model': model}
 
-    # Локально через HF
+    # Locally via HF
     if model.startswith("hf_local::"):
         model_id = model.split("::", 1)[1]
         try:
@@ -339,7 +339,7 @@ def llm_query(model: str, prompt: str, retries_config: Dict, config: Dict, progr
             local.current_data['errors'][model] = str(e)
             return None
 
-    # Провайдеры g4f
+    # g4f providers
     for attempt in range(retries_config['max_retries'] + 1):
         try:
             response = g4f.ChatCompletion.create(
@@ -364,12 +364,12 @@ def llm_query(model: str, prompt: str, retries_config: Dict, config: Dict, progr
 
 
 # -----------------------------
-# Безопасный пробный запуск с таймаутом
+# Safe trial execution with timeout
 # -----------------------------
 
 def safe_execute(code: str, config: Dict) -> Tuple[bool, str]:
     """
-    Выполняет код в подпроцессе с таймаутом — базовая проверка синтаксиса/рантайма.
+    Executes code in a subprocess with a timeout — basic syntax/runtime check.
     """
     try:
         result = subprocess.run(
@@ -391,12 +391,12 @@ def safe_execute(code: str, config: Dict) -> Tuple[bool, str]:
 
 
 # -----------------------------
-# Основной конвейер для одной модели
+# Main pipeline for a single model
 # -----------------------------
 
 def process_model(model: str, task: str, config: Dict, progress_queue: queue.Queue) -> Dict:
     """
-    Выполняет цикл: генерация → (при необходимости) фиксы → рефакторинги.
+    Executes the cycle: generate -> (if necessary) fix -> refactor.
     """
     iterations = []
     current_code = None
@@ -405,7 +405,7 @@ def process_model(model: str, task: str, config: Dict, progress_queue: queue.Que
     progress_queue.put((model, 'status', f"Starting: {config['STAGES']['INITIAL']}"))
     progress_queue.put((model, 'log', f"=== STARTING MODEL: {model} ==="))
 
-    # 1) Начальный запрос
+    # 1) Initial request
     prompt = config['PROMPTS']['INITIAL'].format(task=task)
     progress_queue.put((model, 'log', f"Stage: {config['STAGES']['INITIAL']}. Firing prompt."))
     response = llm_query(model, prompt, config['RETRIES']['INITIAL'], config, progress_queue, config['STAGES']['INITIAL'])
@@ -426,7 +426,7 @@ def process_model(model: str, task: str, config: Dict, progress_queue: queue.Que
     current_code = extract_python_code(response)
     progress_queue.put((model, 'status', "Initial code received. Executing..."))
 
-    # 2) Этапы фиксов/рефакторов
+    # 2) Fix/refactor stages
     pipeline_stages = [
         (CONFIG['STAGES']['FIX_INITIAL'], CONFIG['PROMPTS']['REFACTOR_NO_PREV'], False),
         (CONFIG['STAGES']['FIX_AFTER_REFACTOR'], CONFIG['PROMPTS']['REFACTOR'], True),
@@ -435,15 +435,15 @@ def process_model(model: str, task: str, config: Dict, progress_queue: queue.Que
         pipeline_stages.append((CONFIG['STAGES']['FIX_LOOP'], CONFIG['PROMPTS']['REFACTOR'], True))
 
     for fix_stage, refactor_prompt, use_prev in pipeline_stages:
-        # A) Пробуем исполнить текущий код
+        # A) Try to execute the current code
         progress_queue.put((model, 'log', f"Executing code from previous stage..."))
         success_exec, output = safe_execute(current_code, config)
 
         if not success_exec:
-            # B) Чиним, если упал
+            # B) Fix if it failed
             progress_queue.put((model, 'status', f"Execution failed. Attempting fix: {fix_stage}"))
             progress_queue.put((model, 'log', f"Execution failed. Error:\n{output}"))
-            prompt = CONFIG['PROMPTS']['FIX'].format(code=current_code, error=str(output))
+            prompt = CONFIG['PROMPTS']['FIX'].format(task=task, code=current_code, error=str(output))
             response = llm_query(model, prompt, CONFIG['RETRIES']['FIX'], config, progress_queue, fix_stage)
 
             iterations.append({
@@ -460,14 +460,14 @@ def process_model(model: str, task: str, config: Dict, progress_queue: queue.Que
                 return {'model': model, 'iterations': iterations, 'final_code': None}
             current_code = extract_python_code(response)
 
-        # C) Рефакторим всегда
+        # C) Always refactor
         refactor_stage = fix_stage.replace('fix', 'refactor')
         progress_queue.put((model, 'status', f"Refactoring code: {refactor_stage}"))
 
         if use_prev:
-            prompt = refactor_prompt.format(code=current_code, prev=prev_code)
+            prompt = refactor_prompt.format(task=task, code=current_code, prev=prev_code)
         else:
-            prompt = refactor_prompt.format(code=current_code)
+            prompt = refactor_prompt.format(task=task, code=current_code)
 
         response = llm_query(model, prompt, CONFIG['RETRIES']['FIX'], config, progress_queue, refactor_stage)
 
@@ -481,7 +481,7 @@ def process_model(model: str, task: str, config: Dict, progress_queue: queue.Que
 
         if not response:
             progress_queue.put((model, 'status', f"Failed to refactor at stage: {refactor_stage}"))
-            # Продолжаем с текущим кодом
+            # Continue with the current code
             continue
 
         prev_code = current_code
@@ -495,11 +495,11 @@ def process_model(model: str, task: str, config: Dict, progress_queue: queue.Que
 
 
 # -----------------------------
-# Оркестратор
+# Orchestrator
 # -----------------------------
 
 def orchestrator(task: str, models: List[str], config: Dict, progress_queue: queue.Queue) -> Dict:
-    """Параллельный запуск по всем моделям."""
+    """Parallel launch for all models."""
     folder = config['CONSTANTS']['RESULTS_FOLDER']
     os.makedirs(folder, exist_ok=True)
     results = {}
@@ -530,16 +530,16 @@ def orchestrator(task: str, models: List[str], config: Dict, progress_queue: que
 
 
 # -----------------------------
-# (Опционально) GUI-заглушка
+# (Optional) GUI stub
 # -----------------------------
 if _TKINTER_AVAILABLE:
     class ProgressGUI:
-        # GUI тут не нужен.
+        # GUI is not needed here.
         pass
 
 
 # -----------------------------
-# Консольный режим
+# Console mode
 # -----------------------------
 
 def run_headless_orchestrator(task: str, models: List[str], config: Dict):
@@ -584,62 +584,140 @@ def run_headless_orchestrator(task: str, models: List[str], config: Dict):
 
 
 # -----------------------------
-# Тексты задач (пресеты)
+# Task texts (presets)
 # -----------------------------
 
 def build_default_task_text() -> str:
-    """Изначальная формулировка задачи (adjacent + циклическая пара)."""
+    """The full 'neighbor_sort_moves' task (from task.txt)."""
     return (
         """
-Task: Implement a sorting algorithm that uses ONLY adjacent swaps on a vector.
+You are a senior Python engineer. Implement a simple algorithm in Python that produces a sequence of CYCLIC-ADJACENT swaps which, when applied in order, sorts a list in nondecreasing order.
 
-Input: A vector a of length n (0-indexed).
+## Task
+Write a standalone Python module that defines exactly:
+    def neighbor_sort_moves(vec: list) -> list:
+This function must return a list of index pairs (i, j) representing swaps.
+Applying all swaps in order to a copy of vec must result in a nondecreasing list.
 
-Allowed operation:
-- swap (i, i+1) for i = 0..n-2
-- swap (n-1, 0)
+## Allowed swaps ONLY
+- Adjacent neighbors: (i, i+1) for i = 0 .. n-2
+- Wrap-around neighbors: (n-1, 0)
+No other swap pairs are permitted.
 
-Output: Return a list of swaps as pairs of indices in the form (i, i+1) and, when needed, (n-1, 0).
-Applying these swaps in the given order must transform the original vector into nondecreasing order.
-Do not use any other operations.
+## Constraints & Behavior
+- If n == 0 or n == 1, return [].
+- Handle duplicates correctly.
+- Do NOT print anything. No file/network I/O. No external imports.
+- Return only the moves list.
+- Indices must always be valid (0 <= i, j < n).
+- Keep swaps strictly to the allowed neighbor pairs above.
+- Do NOT use built-ins that solve the task directly for you (e.g., calling sort() to derive the move sequence).
+- Time/termination: use a simple bubble-like process around the ring;
+stop early if a full pass makes no swaps, and in any case cap the process to at most n*n steps to prevent infinite loops.
+
+## Implementation guidance (non-binding)
+- Maintain a working copy of vec.
+- Repeatedly compare a[k] and a[(k+1) % n].
+- If a[k] > a[(k+1) % n], record the swap (k, (k+1) % n), perform it on the working copy, and continue.
+- Track whether any swaps occurred in a full pass; if none, you are done.
+
+## Code quality
+- Include type hints and a clear docstring (describe allowed swaps and behavior).
+- Keep the implementation short and readable; add minimal comments.
+- Follow PEP 8.
+
+## Tests
+Add a small unittest suite that verifies:
+1) Empty and single-element lists:
+   - [] -> []
+   - [5] -> []
+2) Already sorted:
+   - [1, 1, 2, 3, 3] -> applying moves yields a nondecreasing list.
+3) Duplicates:
+   - [2, 2, 1, 1, 3] -> applying moves yields [1, 1, 2, 2, 3].
+4) Reverse order:
+   - [5, 4, 3, 2, 1] -> becomes sorted after applying moves.
+5) Mixed/random small:
+   - [3, 1, 4, 1, 5, 9, 2] -> becomes sorted after applying moves.
+6) Legality checks:
+   - Every returned move is either (i, i+1) for some valid i, or (n-1, 0).
+   - All indices are in range for the given n.
+7) Safety bound (for the tested inputs):
+   - len(moves) <= n*n for n = len(vec) (skip when n in {0,1}).
+For the tests:
+- Write a helper `apply_moves(a, moves)` that:
+  - Copies `a`,
+  - Applies each swap (including wrap-around (n-1, 0)),
+  - Returns the final list.
+- Assert that `apply_moves(vec, neighbor_sort_moves(vec)) == sorted(vec)`.
+- The tests may use Python’s `sorted` for verification.
+
+## Execution
+- Include the standard test runner guard:
+    if __name__ == "__main__":
+        unittest.main()
+
+## Answer format
+- The final answer MUST be a single Python code block with no extra commentary.
 """
     )
 
 
 def build_demo_task_text() -> str:
-    """Упрощённый для LLM демо‑промпт (на основе циклического пузырька)."""
+    """The 'find_max' demo task (from task_demo.txt)."""
     return (
         """
-Task: Sort a list into nondecreasing order by returning a sequence of CYCLIC-ADJACENT swaps only.
+You are a senior Python engineer. Implement a very simple algorithm in Python: find the maximum value in a list using a single linear scan.
 
-Requirements:
-- Define def neighbor_sort_moves(vec: list) -> list
-- Allowed swaps only: (i, i+1) for i=0..n-2 and (n-1, 0)
-- If n<=1: return []
-- Use a bubble-like n*n outer limit with early stop when a full pass makes no swaps.
-- No I/O, no imports, return the *moves list* only.
+## Task
+Write a standalone Python module that defines:
+    def find_max(nums: list[int]) -> int:
 
-Tip: On each pass k=0..n-1 compare a[k] and a[(k+1)%n], swap if needed and record the pair.
+## Requirements
+- Do NOT use built-ins that solve the task directly (e.g., max(), sorted(), numpy).
+- Time complexity: O(n). Extra space: O(1) aside from variables.
+- Behavior:
+  - If nums is empty, raise ValueError("empty sequence").
+  - Support negative numbers, duplicates, and single-element lists.
+- Code quality:
+  - Include type hints and a clear docstring with examples.
+  - Keep the implementation short and readable; add minimal explanatory comments.
+  - Follow PEP 8.
+
+## Tests
+Add a small test suite using Python’s standard library (unittest).
+Cover at least:
+- Basic case: [3, 1, 7, 2] -> 7
+- All negatives: [-5, -2, -9] -> -2
+- Single element: [42] -> 42
+- Duplicates: [5, 5, 5] -> 5
+- Empty list: [] -> raises ValueError("empty sequence")
+
+## Execution
+- Include the standard test runner guard:
+    if __name__ == "__main__":
+        unittest.main()
+- The final answer MUST be a single Python code block with no extra commentary.
 """
     )
 
 
 def load_task_text(args) -> str:
-    # 1) Внешний файл с задачей имеет приоритет
+    # 1) External task file has priority
     if args.task_file:
         try:
             with open(args.task_file, 'r', encoding='utf-8') as f:
                 return f.read()
         except Exception as e:
             print(f"[WARN] Failed to read --task-file: {e}. Falling back to preset.")
-    # 2) Пресеты
+    # 2) Presets
     if args.task_preset == 'demo':
         return build_demo_task_text()
     return build_default_task_text()
 
 
 # -----------------------------
-# Аргументы CLI (новые: --task-preset, --task-file, --results-dir)
+# CLI arguments (new: --task-preset, --task-file, --results-dir)
 # -----------------------------
 
 def parse_args():
@@ -647,7 +725,7 @@ def parse_args():
     p.add_argument("--hf_model", type=str, default=None, help="Local Hugging Face model id or path to test (uses transformers).")
     p.add_argument("--models", type=str, default=None, help="Comma-separated allowlist of g4f models to test.")
     p.add_argument("--max_workers", type=int, default=CONFIG['CONSTANTS']['MAX_WORKERS'], help="Thread pool size.")
-    p.add_argument("--task-preset", choices=["default", "demo"], default="default", help="Which built-in task text to use.")
+    p.add_argument("--task-preset", choices=["default", "demo"], default="default", help="Which built-in task text to use. 'default' is neighbor_sort_moves, 'demo' is find_max.")
     p.add_argument("--task-file", type=str, default=None, help="Path to a custom task text file (overrides preset).")
     p.add_argument("--results-dir", type=str, default=CONFIG['CONSTANTS']['RESULTS_FOLDER'], help="Where to save final_results.json (default matches validation_script).")
     return p.parse_args()
@@ -660,12 +738,12 @@ def parse_args():
 def main():
     args = parse_args()
 
-    # Обновляем конфиг из аргументов
+    # Update config from arguments
     CONFIG['CONSTANTS']['MAX_WORKERS'] = int(args.max_workers)
     if args.results_dir:
         CONFIG['CONSTANTS']['RESULTS_FOLDER'] = args.results_dir
 
-    # Готовим текст задачи согласно опциям
+    # Prepare the task text according to options
     task_description = load_task_text(args)
     print(f"Using task preset: {('file:'+args.task_file) if args.task_file else args.task_preset}")
 
