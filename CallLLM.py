@@ -11,7 +11,7 @@ import threading
 import queue
 import argparse
 import re
-import tempfile # <-- НОВОЕ ИСПРАВЛЕНИЕ
+import tempfile
 
 # -----------------------------
 # Code extraction utilities from LLM response
@@ -62,17 +62,6 @@ try:
     _HF_AVAILABLE = True
 except Exception:
     _HF_AVAILABLE = False
-
-# -----------------------------
-# Tkinter only if DISPLAY is present
-# (Код не изменен)
-# -----------------------------
-try:
-    import tkinter as tk
-    from tkinter import ttk, scrolledtext, messagebox
-    _TKINTER_AVAILABLE = True
-except Exception:
-    _TKINTER_AVAILABLE = False
 
 # -----------------------------
 # Provider rotation patch (for AnyProvider logs)
@@ -136,13 +125,14 @@ retry_mod.RotatedProvider = TrackedRotated
 
 # -----------------------------
 # Config (Generic Prompts)
-# (Код не изменен)
+# --- УПРОЩЕНО ---
 # -----------------------------
 CONFIG = {
     'URLS': {
         'WORKING_RESULTS': '[https://raw.githubusercontent.com/maruf009sultan/g4f-working/refs/heads/main/working/working_results.txt](https://raw.githubusercontent.com/maruf009sultan/g4f-working/refs/heads/main/working/working_results.txt)'
     },
     'PROMPTS': {
+        # Оставляем только один промпт, который будет отформатирован заданием
         'INITIAL': (
             "You are a professional Python programming assistant. Write a correct, functional, and immediately executable Python module to solve the task below.\n\n"
             "## Full Task Description\n"
@@ -151,84 +141,23 @@ CONFIG = {
             "1. Respond with ONLY the complete Python code module. Do not add any explanations, preamble, or markdown formatting around the code block.\n"
             "2. The code must be self-contained, importable, and executable.\n"
             "3. The code MUST implement all requirements, functions, and behaviors specified in the task description.\n"
-            "4. Do NOT read from input(), write to files, or access the network unless the task explicitly requires it.\n"
-            "5. If the task specifies including tests or a main guard (if __name__ == \"__main__\"), you MUST include them."
         ),
-        'DEMO': (
-            # This is just a fallback, the task preset loader is now the main source
-            "You are a professional Python programming assistant. Write a correct, functional, and immediately executable Python module to solve the task below.\n\n"
-            "## Full Task Description\n"
-            "{task}\n\n"
-            "## Strict Rules\n"
-            "1. Respond with ONLY the complete Python code module. Do not add any explanations, preamble, or markdown formatting around the code block.\n"
-            "2. The code must be self-contained, importable, and executable.\n"
-            "3. The code MUST implement all requirements, functions, and behaviors specified in the task description.\n"
-            "4. Do NOT read from input(), write to files, or access the network unless the task explicitly requires it.\n"
-            "5. If the task specifies including tests or a main guard (if __name__ == \"__main__\"), you MUST include them."
-        ),
-        'FIX': (
-            "You are a Python debugging assistant. The following code failed a syntax check or a unit test. "
-            "Return a corrected, self-contained Python module.\n\n"
-            "## Original Task Description\n"
-            "{task}\n\n"
-            "## Faulty Code\n"
-            "{code}\n\n"
-            "## Error Message / Problem Description\n"
-            "{error}\n\n"
-            "## Instructions\n"
-            "1. Respond with ONLY the corrected, complete Python code module.\n"
-            "2. Ensure the new code correctly implements all requirements from the Original Task Description.\n"
-            "3. Do not add any explanations or markdown formatting."
-        ),
-        'REFACTOR_NO_PREV': (
-            "You are a Python optimization expert. Refactor and improve the following module without changing its public API or behavior as defined by the task.\n\n"
-            "## Original Task Description\n"
-            "{task}\n\n"
-            "## Code to Refactor\n"
-            "{code}\n\n"
-            "## Instructions\n"
-            "1. Improve readability, performance, and correctness while adhering strictly to the Original Task Description.\n"
-            "2. Keep the module self-contained and importable.\n"
-            "3. Respond with ONLY the refactored, complete Python code module. No explanations."
-        ),
-        'REFACTOR': (
-            "You are a Python optimization expert. Compare the current and previous versions and produce the best refactored module that satisfies the task.\n\n"
-            "## Original Task Description\n"
-            "{task}\n\n"
-            "## Current Code\n"
-            "{code}\n\n"
-            "## Previous Version (for reference)\n"
-            "{prev}\n\n"
-            "## Instructions\n"
-            "1. Produce the best possible implementation based on the Original Task Description.\n"
-            "2. Improve readability, performance, and correctness.\n"
-            "3. Keep the module self-contained and importable.\n"
-            "4. Respond with ONLY the newest, refactored, complete Python code module. No explanations."
-        )
     },
     'RETRIES': {
+        # Оставляем только одну конфигурацию попыток
         'INITIAL': {'max_retries': 1, 'backoff_factor': 1.0},
-        'FIX': {'max_retries': 3, 'backoff_factor': 2.0}
     },
     'CONSTANTS': {
         'DELIMITER_MODEL': '|',
         'MODEL_TYPE_TEXT': 'text',
         'REQUEST_TIMEOUT': 30,
-        'N_SAVE': 100,
         'MAX_WORKERS': 50,
-        'EXEC_TIMEOUT': 30,
-        'ERROR_TIMEOUT': 'Timeout expired during code execution.',
         'ERROR_NO_RESPONSE': 'No response from model.',
-        'NUM_REFACTOR_LOOPS': 2,
-        'RESULTS_FOLDER': '/kaggle/working/run_results',
+        'RESULTS_FOLDER': './run_results', # Используем относительный путь
     },
     'STAGES': {
+        # Оставляем только один этап
         'INITIAL': 'initial_response',
-        'FIX_INITIAL': 'fix_before_refactor',
-        'REFACTOR_FIRST': 'first_refactor_response',
-        'FIX_AFTER_REFACTOR': 'fix_after_refactor',
-        'REFACTOR': 'refactor_loop',
-        'FIX_LOOP': 'fix_in_loop'
     }
 }
 
@@ -370,155 +299,58 @@ def llm_query(model: str, prompt: str, retries_config: Dict, config: Dict, progr
 
 
 # -----------------------------
-# Safe trial execution with timeout
-# --- ИСПРАВЛЕННАЯ ВЕРСИЯ ---
+# safe_execute (REMOVED)
 # -----------------------------
-
-def safe_execute(code: str, config: Dict) -> Tuple[bool, str]:
-    """
-    Executes code in a subprocess by writing it to a temp file.
-    This allows the 'if __name__ == "__main__":' block to run,
-    executing the model's self-contained unit tests.
-    """
-    if not code:
-        return False, "No code provided to execute."
-
-    try:
-        # Создаем временный файл, который будет автоматически удален
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=True, encoding='utf-8') as temp_file:
-            temp_file.write(code)
-            temp_file.flush()  # Гарантируем, что все записано на диск
-
-            # Запускаем файл python, а не строку
-            result = subprocess.run(
-                [sys.executable, temp_file.name], # <-- ИЗМЕНЕНИЕ: Запускаем файл
-                capture_output=True,
-                text=True,
-                encoding='utf-8',
-                errors='replace',
-                timeout=config['CONSTANTS']['EXEC_TIMEOUT'],
-            )
-
-        if result.returncode == 0:
-            # Успех, если код 0. stdout может содержать 'OK' от тестов.
-            return True, result.stdout or 'Execution successful (stdout empty).'
-        else:
-            # Провал. stderr будет содержать SyntaxError или ошибки unittest
-            return False, result.stderr or 'Unknown error during execution (stderr empty).'
-            
-    except subprocess.TimeoutExpired:
-        return False, config['CONSTANTS']['ERROR_TIMEOUT']
-    except Exception as e:
-        return False, f"Failed to execute temp file: {e}"
+# Функция safe_execute удалена, так как проверка
+# теперь выполняется исключительно в validation_script.py
 
 
 # -----------------------------
 # Main pipeline for a single model
-# (Код не изменен)
+# --- СИЛЬНО УПРОЩЕНО ---
 # -----------------------------
 
 def process_model(model: str, task: str, config: Dict, progress_queue: queue.Queue) -> Dict:
     """
-    Executes the cycle: generate -> (if necessary) fix -> refactor.
+    Executes the simple cycle: generate -> extract.
+    No more fix or refactor loops.
     """
     iterations = []
     current_code = None
-    prev_code = None
 
-    progress_queue.put((model, 'status', f"Starting: {config['STAGES']['INITIAL']}"))
+    stage = config['STAGES']['INITIAL']
+    progress_queue.put((model, 'status', f"Starting: {stage}"))
     progress_queue.put((model, 'log', f"=== STARTING MODEL: {model} ==="))
 
     # 1) Initial request
     prompt = config['PROMPTS']['INITIAL'].format(task=task)
-    progress_queue.put((model, 'log', f"Stage: {config['STAGES']['INITIAL']}. Firing prompt."))
-    response = llm_query(model, prompt, config['RETRIES']['INITIAL'], config, progress_queue, config['STAGES']['INITIAL'])
+    progress_queue.put((model, 'log', f"Stage: {stage}. Firing prompt."))
+    response = llm_query(model, prompt, config['RETRIES']['INITIAL'], config, progress_queue, stage)
 
-    iterations.append({
+    iteration_data = {
         'providers_tried': local.current_data.get('tried', []),
         'success_provider': local.current_data.get('success'),
-        'stage': config['STAGES']['INITIAL'],
+        'stage': stage,
         'response': response,
         'error': None if response else config['CONSTANTS']['ERROR_NO_RESPONSE'],
-    })
+    }
+    iterations.append(iteration_data)
 
     if not response:
-        progress_queue.put((model, 'status', f"Failed: {config['STAGES']['INITIAL']}"))
+        progress_queue.put((model, 'status', f"Failed: {stage}"))
         progress_queue.put((model, 'done', None))
         return {'model': model, 'iterations': iterations, 'final_code': None}
 
+    # 2) Extract code
     current_code = extract_python_code(response)
-    progress_queue.put((model, 'status', "Initial code received. Executing..."))
-
-    # 2) Fix/refactor stages
-    pipeline_stages = [
-        (CONFIG['STAGES']['FIX_INITIAL'], CONFIG['PROMPTS']['REFACTOR_NO_PREV'], False),
-        (CONFIG['STAGES']['FIX_AFTER_REFACTOR'], CONFIG['PROMPTS']['REFACTOR'], True),
-    ]
-    for _ in range(CONFIG['CONSTANTS']['NUM_REFACTOR_LOOPS']):
-        pipeline_stages.append((CONFIG['STAGES']['FIX_LOOP'], CONFIG['PROMPTS']['REFACTOR'], True))
-
-    for fix_stage, refactor_prompt, use_prev in pipeline_stages:
-        # A) Try to execute the current code
-        progress_queue.put((model, 'log', f"Executing code from previous stage..."))
-        
-        # <-- ТЕПЕРЬ ЭТА ФУНКЦИЯ ЗАПУСКАЕТ UNIT-ТЕСТЫ -->
-        success_exec, output = safe_execute(current_code, config)
-
-        if not success_exec:
-            # B) Fix if it failed
-            progress_queue.put((model, 'status', f"Execution failed. Attempting fix: {fix_stage}"))
-            progress_queue.put((model, 'log', f"Execution failed. Error:\n{output}"))
-            
-            # *** MODIFICATION: Added 'task=task' to FIX prompt ***
-            prompt = CONFIG['PROMPTS']['FIX'].format(task=task, code=current_code, error=str(output))
-            response = llm_query(model, prompt, CONFIG['RETRIES']['FIX'], config, progress_queue, fix_stage)
-
-            iterations.append({
-                'providers_tried': local.current_data.get('tried', []),
-                'success_provider': local.current_data.get('success'),
-                'stage': fix_stage,
-                'response': response,
-                'error': None if response else CONFIG['CONSTANTS']['ERROR_NO_RESPONSE'],
-            })
-
-            if not response:
-                progress_queue.put((model, 'status', f"Failed to fix code at stage: {fix_stage}"))
-                progress_queue.put((model, 'done', None))
-                return {'model': model, 'iterations': iterations, 'final_code': None}
-            current_code = extract_python_code(response)
-
-        # C) Always refactor
-        refactor_stage = fix_stage.replace('fix', 'refactor')
-        progress_queue.put((model, 'status', f"Refactoring code: {refactor_stage}"))
-
-        # *** MODIFICATION: Added 'task=task' to REFACTOR prompts ***
-        if use_prev:
-            prompt = refactor_prompt.format(task=task, code=current_code, prev=prev_code)
-        else:
-            prompt = refactor_prompt.format(task=task, code=current_code)
-
-        response = llm_query(model, prompt, CONFIG['RETRIES']['FIX'], config, progress_queue, refactor_stage)
-
-        iterations.append({
-            'providers_tried': local.current_data.get('tried', []),
-            'success_provider': local.current_data.get('success'),
-            'stage': refactor_stage,
-            'response': response,
-            'error': None if response else CONFIG['CONSTANTS']['ERROR_NO_RESPONSE'],
-        })
-
-        if not response:
-            progress_queue.put((model, 'status', f"Failed to refactor at stage: {refactor_stage}"))
-            # Continue with the current code
-            continue
-
-        prev_code = current_code
-        current_code = extract_python_code(response)
-
+    progress_queue.put((model, 'status', "Initial code received."))
+    
+    # 3) Done
     progress_queue.put((model, 'status', 'Completed'))
     progress_queue.put((model, 'log', f"=== FINAL CODE:\n{current_code or 'None'}"))
     progress_queue.put((model, 'log', f"=== FINISHED MODEL: {model} ==="))
     progress_queue.put((model, 'done', None))
+    
     return {'model': model, 'iterations': iterations, 'final_code': current_code}
 
 
@@ -551,7 +383,7 @@ def orchestrator(task: str, models: List[str], config: Dict, progress_queue: que
 
     # *** УЛУЧШЕНИЕ: Добавляем 'task_description' в итоговый JSON ***
     final_results = {
-        'task_description': task,
+        'task_description': task, # Это важно для validation_script
         'results': list(results.values()), 
         'timestamp': datetime.now().isoformat()
     }
@@ -566,12 +398,8 @@ def orchestrator(task: str, models: List[str], config: Dict, progress_queue: que
 
 # -----------------------------
 # (Optional) GUI stub
-# (Код не изменен)
 # -----------------------------
-if _TKINTER_AVAILABLE:
-    class ProgressGUI:
-        # GUI is not needed here.
-        pass
+# (Удалено для простоты, т.к. не использовалось)
 
 
 # -----------------------------
@@ -622,11 +450,12 @@ def run_headless_orchestrator(task: str, models: List[str], config: Dict):
 
 # -----------------------------
 # Task texts (presets)
-# (Код не изменен)
+# --- УПРОЩЕНО ---
 # -----------------------------
 
 def build_default_task_text() -> str:
     """The 'neighbor_sort_moves' task (from task.txt)."""
+    # Этот текст больше не просит LLM генерировать тесты
     return (
         """
 You are a senior Python engineer. Implement a simple algorithm in Python that produces a sequence of CYCLIC-ADJACENT swaps which, when applied in order, sorts a list in nondecreasing order.
@@ -658,37 +487,6 @@ stop early if a full pass makes no swaps, and in any case cap the process to at 
 - Keep the implementation short and readable; add minimal comments.
 - Follow PEP 8.
 
-## Tests
-Add a small unittest suite that verifies:
-1) Empty and single-element lists:
-   - [] -> []
-   - [5] -> []
-2) Already sorted:
-   - [1, 1, 2, 3, 3] -> applying moves yields a nondecreasing list.
-3) Duplicates:
-   - [2, 2, 1, 1, 3] -> applying moves yields [1, 1, 2, 2, 3].
-4) Reverse order:
-   - [5, 4, 3, 2, 1] -> becomes sorted after applying moves.
-5) Mixed/random small:
-   - [3, 1, 4, 1, 5, 9, 2] -> becomes sorted after applying moves.
-6) Legality checks:
-   - Every returned move is either (i, i+1) for some valid i, or (n-1, 0).
-   - All indices are in range for the given n.
-7) Safety bound (for the tested inputs):
-   - len(moves) <= n*n for n = len(vec) (skip when n in {0,1}).
-For the tests:
-- Write a helper `apply_moves(a, moves)` that:
-  - Copies `a`,
-  - Applies each swap (including wrap-around (n-1, 0)),
-  - Returns the final list.
-- Assert that `apply_moves(vec, neighbor_sort_moves(vec)) == sorted(vec)`.
-- The tests may use Python’s `sorted` for verification.
-
-## Execution
-- Include the standard test runner guard:
-    if __name__ == "__main__":
-        unittest.main()
-
 ## Answer format
 - The final answer MUST be a single Python code block with no extra commentary.
 """
@@ -696,7 +494,8 @@ For the tests:
 
 
 def build_demo_task_text() -> str:
-    """The 'find_max' demo task (from task_demo.txt)."""
+    """The 'find_max' demo task."""
+    # Этот текст также больше не просит LLM генерировать тесты
     return (
         """
 You are a senior Python engineer. Implement a very simple algorithm in Python: find the maximum value in a list using a single linear scan.
@@ -716,19 +515,7 @@ Write a standalone Python module that defines:
   - Keep the implementation short and readable; add minimal explanatory comments.
   - Follow PEP 8.
 
-## Tests
-Add a small test suite using Python’s standard library (unittest).
-Cover at least:
-- Basic case: [3, 1, 7, 2] -> 7
-- All negatives: [-5, -2, -9] -> -2
-- Single element: [42] -> 42
-- Duplicates: [5, 5, 5] -> 5
-- Empty list: [] -> raises ValueError("empty sequence")
-
-## Execution
-- Include the standard test runner guard:
-    if __name__ == "__main__":
-        unittest.main()
+## Answer format
 - The final answer MUST be a single Python code block with no extra commentary.
 """
     )
@@ -750,16 +537,16 @@ def load_task_text(args) -> str:
 
 # -----------------------------
 # CLI arguments
-# (Код не изменен)
+# (Код не изменен, но --task-file теперь важнее)
 # -----------------------------
 
 def parse_args():
-    p = argparse.ArgumentParser(description="LLM code generation runner with optional local HF model support")
+    p = argparse.ArgumentParser(description="LLM code generation runner (Simplified)")
     p.add_argument("--hf_model", type=str, default=None, help="Local Hugging Face model id or path to test (uses transformers).")
     p.add_argument("--models", type=str, default=None, help="Comma-separated allowlist of g4f models to test.")
     p.add_argument("--max_workers", type=int, default=CONFIG['CONSTANTS']['MAX_WORKERS'], help="Thread pool size.")
     p.add_argument("--task-preset", choices=["default", "demo"], default="default", help="Which built-in task text to use. 'default' is neighbor_sort_moves, 'demo' is find_max.")
-    p.add_argument("--task-file", type=str, default=None, help="Path to a custom task text file (overrides preset).")
+    p.add_argument("--task-file", type=str, default=None, help="Path to a custom task text file (overrides preset). **THIS IS THE RECOMMENDED WAY**")
     p.add_argument("--results-dir", type=str, default=CONFIG['CONSTANTS']['RESULTS_FOLDER'], help="Where to save final_results.json (default matches validation_script).")
     return p.parse_args()
 
@@ -779,7 +566,11 @@ def main():
 
     # Prepare the task text according to options
     task_description = load_task_text(args)
-    print(f"Using task: {('file:'+args.task_file) if args.task_file else args.task_preset}")
+    if args.task_file:
+         print(f"Using task from file: {args.task_file}")
+    else:
+         print(f"Using built-in task preset: {args.task_preset}")
+
 
     print("Selecting models...")
     models = get_models_list(CONFIG, args)
@@ -790,12 +581,8 @@ def main():
         print("No models found. Exiting.")
         return
 
-    if _TKINTER_AVAILABLE and os.environ.get('DISPLAY'):
-        print("Display found, but GUI is not implemented in this build; falling back to headless.")
-        run_headless_orchestrator(task_description, test_models, CONFIG)
-    else:
-        print("Running in headless (console) mode...")
-        run_headless_orchestrator(task_description, test_models, CONFIG)
+    print("Running in headless (console) mode...")
+    run_headless_orchestrator(task_description, test_models, CONFIG)
 
 
 if __name__ == "__main__":

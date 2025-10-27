@@ -1,27 +1,46 @@
 You are a senior Python engineer. Implement a simple algorithm in Python that produces a sequence of CYCLIC-ADJACENT swaps which, when applied in order, sorts a list in nondecreasing order.
-## Task
+
+Task
+
 Write a standalone Python module that defines exactly:
-    def neighbor_sort_moves(vec: list) -> list:
+def neighbor_sort_moves(vec: list) -> list:
 This function must return a list of index pairs (i, j) representing swaps.
 Applying all swaps in order to a copy of vec must result in a nondecreasing list.
-## Allowed swaps ONLY
-- Adjacent neighbors: (i, i+1) for i = 0 .. n-2
-- Wrap-around neighbors: (n-1, 0)
-No other swap pairs are permitted.
-## Constraints & Behavior
-- If n == 0 or n == 1, return [].
-- Handle duplicates correctly.
-- Do NOT print anything. No file/network I/O. No external imports.
-- Return only the moves list.
-- Indices must always be valid (0 <= i, j < n).
-- Keep swaps strictly to the allowed neighbor pairs above.
-- Do NOT use built-ins that solve the task directly for you (e.g., calling sort() to derive the move sequence).
-- Time/termination: use a simple bubble-like process around the ring;
-stop early if a full pass makes no swaps, and in any case cap the process to at most n*n steps to prevent infinite loops.
-## Code quality
-- Include type hints and a clear docstring (describe allowed swaps and behavior).
-- Keep the implementation short and readable; add minimal comments.
-- Follow PEP 8.
 
-## Answer format
-- The final answer MUST be a single Python code block with no extra commentary.
+Allowed swaps ONLY
+
+Adjacent neighbors: (i, i+1) for i = 0 .. n-2
+
+Wrap-around neighbors: (n-1, 0)
+No other swap pairs are permitted.
+
+Constraints & Behavior
+
+If n == 0 or n == 1, return [].
+
+Handle duplicates correctly.
+
+Do NOT print anything. No file/network I/O. No external imports.
+
+Return only the moves list.
+
+Indices must always be valid (0 <= i, j < n).
+
+Keep swaps strictly to the allowed neighbor pairs above.
+
+Do NOT use built-ins that solve the task directly for you (e.g., calling sort() to derive the move sequence).
+
+Time/termination: use a simple bubble-like process around the ring;
+stop early if a full pass makes no swaps, and in any case cap the process to at most n*n steps to prevent infinite loops.
+
+Code quality
+
+Include type hints and a clear docstring (describe allowed swaps and behavior).
+
+Keep the implementation short and readable; add minimal comments.
+
+Follow PEP 8.
+
+Answer format
+
+The final answer MUST be a single Python code block with no extra commentary.

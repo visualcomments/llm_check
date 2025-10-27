@@ -283,7 +283,7 @@ print(json.dumps({{
 
 
 # This driver is for the 'find_max' task
-# --- ИСПРАВЛЕННАЯ ВЕРСИЯ ---
+# (Код не изменен)
 TEST_DRIVER_FIND_MAX = """
 import unittest
 import importlib.util
@@ -456,7 +456,10 @@ def main():
         current_function_name = "find_max"
         current_test_driver = TEST_DRIVER_FIND_MAX
     else:
-        print("Defaulting to 'neighbor_sort_moves' task.")
+        # 'neighbor_sort_moves' или любой другой текст из prompt.txt
+        # будет по умолчанию использовать тесты 'neighbor_sort_moves'.
+        # Это ЛОГИКА, которую нужно будет расширить, если вы добавите больше задач.
+        print("Defaulting to 'neighbor_sort_moves' task logic.")
         current_function_name = "neighbor_sort_moves"
         current_test_driver = TEST_DRIVER_SORT
     # --------------------------------
@@ -473,7 +476,9 @@ def main():
 
     for i, result in enumerate(results, 1):
         model_name = result.get('model', f'Unknown_{i}')
-        final_code = result.get('final_code')
+        # Мы берем final_code, который теперь является
+        # единственным сгенерированным кодом
+        final_code = result.get('final_code') 
         
         print(f"\r({i}/{len(results)}) Validating model: {model_name.ljust(40)}", end="", flush=True)
         
